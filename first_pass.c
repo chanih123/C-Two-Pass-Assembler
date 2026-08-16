@@ -58,13 +58,13 @@ while(fgets(line, sizeof(line), fp) != NULL){
         if(is_empty_or_comment(line) == 0){
             if(sscanf(line, "%s %n", word, &bytes_read ) == 1) /* Extract the first word from the line */{
                 if (word[strlen(word) - 1] == ':'){
+                    label_name[strlen(label_name) -1] = '\0';
                     if(is_valid_label(word, line_number) == 0){
                         error_found++;
                         continue;
                     }
                     there_is_label = 1;
                     strcpy(label_name, word);
-                    label_name[strlen(label_name) -1] = '\0';
                     next_part = line + bytes_read;
                     if(sscanf(next_part, "%s %n", command_name, &bytes_read) != 1){
                         fprintf(stderr, "Error in line %d: There is no command name.\n", line_number);
