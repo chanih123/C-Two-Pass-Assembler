@@ -1,66 +1,161 @@
+#include <stdio.h>
+#include <string.h>
 #include "global.h"
+#include "utils.h"
+#include "symbol_table.h"
 
-#define MAX_LABEL_LEN 31
+BYTE *code_image = NULL;
+int code_capacity = 10;
+BYTE *data_image = NULL;
+int data_capacity = 0;
+int IC = 100;
+int DC = 0;
+int ICF = 0;
+int DCF = 0;
+int symbol_capacity = 10;
+int symbol_count = 0;
+
+int run_first_pass(char *filename){
+
+int opcode = 0;
+int funct = 0;
+int line_number = 0;
+int bytes_read = 0;
+int error_found = 0;
+
+
+int there_is_label = 0;
 
 char line[1024];
 char word[1024];
-bool Label = false;
-IC = 100;
-DC = 0;
-
-
-int main(){
-int bytes_read = 0;
+char label_name[1024];
+char command_name[1024];
+char ext_label[32];
+char *parameters;
 char *next_part;
-FOREVER{
+
+FILE *fp;
+
+Symbol *symbol_table = init_symbol_table(symbol_capacity);
+data_image = (BYTE *) malloc(data_capacity * sizeof(BYTE));
+if (data_image == NULL) {
+    fprintf(stderr, "Fatal Error: Memory allocation failed for Data Image\n");
+    exit(1);
+}
+fp = fopen(filename, "r");
+if(fp == NULL){
+    fprintf(stderr, "Fatal Error: The file does not exist.\n");
+    exit(1);
+}
+while(fgets(line, sizeof(line), fp) != NULL){
     /* Read a full line from standard input safely */
-    if (fgets(line, sizeof(line), stdin) != NULL) {
+        line_number++;
+        there_is_label = 0;
+        word[0] = '\0';
+        command_name[0] = '\0';
+        label_name[0] = '\0';
+        bytes_read = 0;
         if(is_empty_or_comment(line) == 0){
-            if (sscanf(line, "%s%n", word, &bytes_read ) == 1) /* Extract the first word from the line */{
-                if(is_label(word) == 0){
-                    Label = true;
-                next_part = line + bytes_read;
-                if(sscanf(next_part, "%s", next_word) == 1){
-                    if(is_data_directive(next_part)){
-                    /*line 7 */
+            if(sscanf(line, "%s %n", word, &bytes_read ) == 1) /* Extract the first word from the line */{
+                if (word[strlen(word) - 1] == ':'){
+                    if(is_valid_label(word, line_number) == 0){
+                        error_found++;
+                        continue;
                     }
-                    else /*line 9*/
-                } /*end - if(sscanf(next_part, "%s", next_word) == 1)*/
-                    }/* end - if(isLabel(current) == 0)*/
-                  }/* end -  if (sscanf(line, "%s", current) == 1) 
-        } /*end - if(line != "/0" || line != "/")*/
-        }/* end - if(is_empty_or_comment(line) == 0)*/ 
-    else
-        break;
-}
-int is_label(char *word){
-    int i = 0;
-    int length = strlen(word);
-    if (length < 2 || (length - 1) > MAX_LABEL_LEN)
-        return 0;
-    if(!((word[0] >= 'a' && word[0] <= 'z') || (word[0] >= 'A' && word[0] <= 'Z')))
+                    there_is_label = 1;
+                    strcpy(label_name, word);
+                    label_name[strlen(label_name) -1] = '\0';
+                    next_part = line + bytes_read;
+                    if(sscanf(next_part, "%s %n", command_name, &bytes_read) != 1){
+                        fprintf(stderr, "Error in line %d: There is no command name.\n", line_number);
+                        error_found++;
+                        continue;
+                    }
+                    parameters = next_part + bytes_read;
+                    if((has_parameters(parameters) == 0) && (strcmp(command_name, "hlt") == 1)){
+                        fprintf(stderr, "Error in line %d: There is no parameters\n", line_number);
+                        error_found++;
+                        continue;
+                    }
+                } /* end - (word[length - 1] == ':')*/
+                else{
+                    strcpy(command_name, word);
+                    parameters = line + bytes_read;
+                }
+                if(is_data_directive(command_name)){
+                    if(there_is_label == 1){
+                        if(add_symbol(&symbol_table, &symbol_count, &symbol_capacity, label_name, DC, data, 0, line_number) != 1)
+                          error_found++;
+                    }
+                       if(strcmp(command_name, ".asciz") == 0){
+                          if(check_asciz_parameter(parameters, line_number))
+                              enter_asciz_to_data_image(parameters);
+                       }
+                       else{
+                            if(strcmp(command_name, ".db") == 0){
+                                if(check_directive_parameter(parameters, DIRECTIVE_DB, line_number))
+                                    enter_to_data_image(parameters, 1);
+                            }
+                            if(strcmp(command_name, ".dh") == 0){
+                              if(check_directive_parameter(parameters, DIRECTIVE_DH, line_number))
+                                  enter_to_data_image(parameters, 2);
+                            }
+                            if(strcmp(command_name, ".dw") == 0){
+                              if(check_directive_parameter(parameters, DIRECTIVE_DW, line_number))
+                                  enter_to_data_image(parameters, 4);
+                            }
+                        } /*end else */
+                     continue;
+                    } /* end - if(is_data_directive(next_part)) */
+                if((strcmp(command_name, ".entry") == 0))
+                    continue;
+                if((strcmp(command_name, ".extern") == 0)){
+                    if(parameters != NULL){
+                       if(sscanf(parameters, "%s", ext_label) == 1){
+                          if(add_symbol(&symbol_table, &symbol_count, &symbol_capacity, ext_label, 0, external, 0, line_number) == 0)
+                              error_found++;
+                       }
+                    }
+                continue;
+                } /* end if((strcmp(command_name, ".extern")*/ 
+                if(there_is_label == 1){
+                    if(add_symbol(&symbol_table, &symbol_count, &symbol_capacity, label_name, IC, code, 0, line_number) == 0)
+                      error_found++;
+                }
+                opcode = get_opcode(command_name);
+                if(opcode == -1){
+                    fprintf(stderr, "Error in line %d: Invalid command name\n", line_number);
+                    error_found++;
+                }
+                else{
+                    if(opcode == 0 || opcode == 1){
+                        funct = get_funct(command_name);
+                        if(check_and_enter_R_function_parameter(parameters, opcode, funct, line_number) == 0)
+                          error_found++;
+                    }
+                    else{
+                    if(opcode >= 10 && opcode <= 24){
+                       if(check_and_enter_I_function_parameter(parameters, opcode, line_number) == 0)
+                          error_found++;
+                    }
+                    else{
+                       if(check_end_enter_J_function_parameter(parameters, opcode, line_number) == 0)
+                       error_found++;
+                    }
+                    }
+                }/*end else*/  
+            } /* end if(sscanf(line, "%s %n", word, &bytes_read ) == 1) */
+        }/* end - if(is_empty_or_comment(line) == 0)*/
+  }/*end FOREVER*/
+    fclose(fp);
+    if(error_found > 0){
+      fprintf(stderr, "%d errors found during first pass in file %s. Skipping second pass.\n", error_found, filename);
       return 0;
-    if (word[length - 1] != ':')
-        return 0;
-    while(i < length - 1){
-        if((word[i] >= 'a' && word[i] <= 'z') || (word[i] >= 'A' && word[i] <= 'Z') || (word[i] >= '0' && word[i] <= '9'))
-        i++;
-        else
-             return 0;
-    } /*end while*/
-    word[length - 1] = '\0';
-    if(get_opcode(word) != -1)
-        return 0;
-    return 1;
+    } 
+    DCF = DC;
+    ICF = IC;
+    update_data_symbol_table(symbol_table, symbol_count, ICF);
+    return 1; 
 }
-int is_data_directive(char *word){
-  if(word[0] != '.')
-    return 0;
-  if((strcmp(word, ".dh") == 0) || (strcmp(word, ".dw") == 0) || (strcmp(word, ".db") == 0) || (strcmp(word, ".asciz") == 0))
-      return 1;
-  return 0;
-}
-
-
-        
+      
         

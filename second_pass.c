@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <string.h>
 #include "global.h"
@@ -114,4 +115,5 @@ int run_second_pass(char *filename) {
     /* שלב 10: בנה את קבצי הפלט. מוחזר 1 (הצלחה) כדי שה-main יוכל לקרוא לפונקציית בניית הקבצים */
     return 1;
 }
+
 

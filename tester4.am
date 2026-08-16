@@ -1,0 +1,56 @@
+; ==============================================================================
+; Test File 1: Master Valid Test (Covers all 27 opcodes and edge cases)
+; ==============================================================================
+
+; 1. Directives & Externs at start
+        .extern EXTVAL
+        .extern EXTFUNC
+        .entry  STARTLABEL
+        .entry  DATAMAXLEN31CHARACTERSLABEL123
+
+; 2. Section 1: R-Type Instructions (3 operands and 2 operands)
+STARTLABEL: add     $0, $31, $1
+            sub     $31, $0, $30
+            and     $1, $2, $3
+            or      $4, $5, $6
+            nor     $7, $8, $9
+            move    $10, $11
+            mvhi    $12, $13
+            mvlo    $14, $15
+
+; 3. Section 2: I-Type Arithmetic & Logical Instructions (Boundaries: -32768, 32767)
+            addi    $1, -1, $2
+            subi    $3, 0, $4
+            andi    $5, 100, $6
+            ori     $7, -32768, $8
+            nori    $9, 32767, $10
+
+; 4. Section 3: I-Type Conditional Branching Instructions
+BRANCHLOOP: beq     $1, $2, ENDPROGRAM
+            bne     $3, $4, BRANCHLOOP
+            blt     $5, $6, STARTLABEL
+            bgt     $7, $8, BRANCHLOOP
+
+; 5. Section 4: I-Type Memory Instructions (Positive, Negative, and Zero Offsets)
+            lb      $11, -1, $12
+            sb      $13, 0, $14
+            lh      $15, 2, $16
+            sh      $17, -2, $18
+            lw      $19, 4, $20
+            sw      $21, -4, $22
+
+; 6. Section 5: J-Type Instructions (Labels, Externs, and Register Jump)
+            jmp     STARTLABEL
+            la      EXTVAL
+            call    EXTFUNC
+            jmp     $31
+            la      DATAMAXLEN31CHARACTERSLABEL123
+
+; 7. Section 6: Data Directives (All sizes, byte boundaries, ASCII, and empty strings)
+DATALIST:   .db     -128, 127, 0, -1, 1
+            .dh     -32768, 32767, 0, -100, 100
+DATAMAXLEN31CHARACTERSLABEL123: .dw -2147483648, 2147483647, 0, 500
+            .asciz  "Hello Systems Programming 2026!"
+            .asciz  ""
+
+ENDPROGRAM: hlt

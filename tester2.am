@@ -1,0 +1,35 @@
+; === Test 2: All Instruction Types, Boundary Registers and Jumps ===
+.entry START
+.extern EXT_FUNC
+
+START:      add    $0, $31, $1
+            sub    $31, $0, $30
+            move   $1, $2
+            mvhi   $31, $0
+            mvlo   $15, $16
+
+LOOP:       addi   $1, -1, $1
+            andi   $31, 0, $0
+            ori    $2, -32768, $3
+            nori   $4, 32767, $5
+
+            beq    $1, $0, ENDLOOP
+            bne    $1, $2, LOOP
+            blt    $3, $4, LOOP
+            bgt    $5, $6, ENDLOOP
+
+            lw     $1, 4, $2
+            sw     $0, -4, $31
+            lh     $3, 2, $4
+            sh     $5, -2, $6
+            lb     $7, 1, $8
+            sb     $9, -1, $10
+
+            la     BUFFER
+            call   EXTFUNC
+            jmp    $31
+            jmp    START
+
+ENDLOOP:   hlt
+
+

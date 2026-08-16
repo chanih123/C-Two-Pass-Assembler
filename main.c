@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "preprocessor.h"
+#include "global.h"
+#include "first_pass.h"
 
 int main(int argc, char *argv[]) 
 {
-    int i;
+    int i, j;
     FILE *input_file;
     FILE *output_file;
     char *input_filename;
@@ -16,7 +18,7 @@ int main(int argc, char *argv[])
     /* בדיקה שהועברו ארגומנטים משורת הפקודה (שמות הקבצים ללא סיומת) */
     if (argc < 2) 
     {
-        printf("Usage: %s <file1> <file2> ...\n", argv[0]);
+        fprintf(stderr, "Usage: %s <file1> <file2> ...\n", argv[0]);
         return EXIT_FAILURE;
     }
 
@@ -63,7 +65,7 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        printf("Processing file: %s...\n", input_filename);
+        printf("=== Processing file: %s ===\n", input_filename);
 
         /* הפעלת שלב קדם-האסמבלר - פרישת המאקרואים */
         process_result = process_macros(input_file, output_file, &macro_head);
@@ -72,23 +74,58 @@ int main(int argc, char *argv[])
         fclose(input_file);
         fclose(output_file);
 
-        /* ניקוי הזיכרון של רשימת המאקרואים - חשוב להשתמש בפונקציה שכתבת קודם */
+        /* ניקוי הזיכרון של רשימת המאקרואים */
         free_macros(macro_head);
 
         /* ניהול התוצאה: מעבר לשלב הבא או עצירה ומחיקה */
         if (process_result == SUCCESS) 
         {
             printf("Macro unrolling completed successfully for '%s'.\n", argv[i]);
+            printf("=== Starting First Pass for file: %s ===\n\n", output_filename);
             
-            /* TODO: כאן יתווספו הקריאות לשלבים הבאים של האסמבלר 
-               first_pass(output_filename); 
-               וכו' */
+            /* הרצת המעבר הראשון על הקובץ שנוצר */
+            if (run_first_pass(output_filename)) 
+            {
+                printf("\n>>> First Pass Completed Successfully for '%s'! <<<\n", argv[i]);
+                printf("Final IC (Instruction Counter) = %d\n", IC);
+                printf("Final DC (Data Counter)        = %d\n\n", DC);
+
+                /* 1. הדפסת תמונת הקוד (code_image) */
+                printf("=========================================\n");
+                printf("             CODE IMAGE (%d bytes)       \n", IC - 100);
+                printf("=========================================\n");
+                for (j = 100; j < IC; j += 4) {
+                    printf("Address %04d:  %02X %02X %02X %02X\n", 
+                           j, 
+                           code_image[j], 
+                           code_image[j + 1], 
+                           code_image[j + 2], 
+                           code_image[j + 3]);
+                }
+                printf("\n");
+
+                /* 2. הדפסת תמונת הנתונים (data_image) */
+                printf("=========================================\n");
+                printf("             DATA IMAGE (%d bytes)       \n", DC);
+                printf("=========================================\n");
+                for (j = 0; j < DC; j++) {
+                    printf("DC[%04d] (Absolute %04d):  0x%02X (%d)\n", 
+                           j, 
+                           IC + j, 
+                           data_image[j], 
+                           (signed char)data_image[j]);
+                }
+                printf("=========================================\n\n");
+            } 
+            else 
+            {
+                printf("\n>>> First Pass Failed due to errors in file '%s'. <<<\n\n", output_filename);
+            }
         } 
         else 
         {
-            printf("Errors found in '%s'. Stopping process for this file.\n", argv[i]);
-            /* לפי ההנחיות: אם יש שגיאה במאקרו, עוצרים ולא ממשיכים לשלב הבא.
-               נהוג גם למחוק את קובץ ה-.am הפגום שנוצר */
+            printf("Errors found in '%s'. Stopping process for this file.\n\n", input_filename);
+            /* לפי ההנחיות: אם יש שגיאה במאקרו, עוצרים ולא ממשיכים לשלב הבא. */
             remove(output_filename);
         }
 
