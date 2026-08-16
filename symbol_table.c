@@ -57,11 +57,11 @@ int find_symbol_index(Symbol *symbol_table, int symbol_count, char *name){
     }
     return -1; /* הסמל לא נמצא */
 }
-void update_data_symbol_table(Symbol **symbol_table, int *symbol_count, int *symbol_capacity, int ICF){
+void update_data_symbol_table(Symbol *symbol_table, int symbol_count, int ICF){
     int i;
-    for (i = 0; i < *symbol_count; i++) {
-        if (symbol_table[i]->type ==  data){
-            symbol_table[i]->value += ICF;
+    for (i = 0; i < symbol_count; i++) {
+        if (symbol_table[i].type ==  data){
+            symbol_table[i].value += ICF;
         }
     }
 }

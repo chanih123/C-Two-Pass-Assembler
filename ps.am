@@ -11,8 +11,5 @@ NEXT: move $20,$4
  jmp $4
 END: hlt
 STR: .asciz "aBcd"
-LIST: .db 6, -9
- .dh 27056
 .entry K
-K: .dw 31,-12
 .extern val1 

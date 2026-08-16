@@ -75,7 +75,7 @@ return 0;
 int is_valid_label(char *word, int line_number){
     int length = strlen(word);
     int i;
-    if (length < 2 || (length - 1) > MAX_LABEL_LENGTH){
+    if (length < 1 || (length - 1) > MAX_LABEL_LENGTH){
         fprintf(stderr, "Error in line %d: The label name is too long\n", line_number);
         return 0;
         }
@@ -357,91 +357,98 @@ return 1;
 
 int check_directive_parameter(char *parameters, int line_number)
 {
-    char *p = parameters;
-    int expect_number = 1;
+int check_directive_parameter(const char *line, DirectiveType type, int line_number) {
+    const char *ptr;
+    char *endptr;
+    long long value;
+    int expecting_number;
+    int count;
 
-    /* דילוג על רווחים בתחילת השורה */
-    while (*p == ' ' || *p == '\t')
-        p++;
-
-    /* אין פרמטרים */
-    if (*p == '\0') {
-        fprintf(stderr, "Error in line %d: Missing parameter\n", line_number);
+    if (line == NULL) {
+        fprintf(stderr, "Error in line %d: Null pointer provided.\n", line_number);
         return 0;
     }
 
-    while (1) {
+    ptr = skip_spaces(line);
+    expecting_number = 1;
+    count = 0;
 
-        if (expect_number) {
-
-            /* פסיק לפני המספר הראשון או אחרי פסיק */
-            if (*p == ',') {
-                fprintf(stderr,
-                        "Error in line %d: Comma before the first number\n",
-                        line_number);
-                return 0;
-            }
-
-            /* סימן אופציונלי */
-            if (*p == '+' || *p == '-')
-                p++;
-
-            /* חייבת להיות לפחות ספרה אחת */
-            if (!isdigit(*p)) {
-                fprintf(stderr,
-                        "Error in line %d: Illegal number\n",
-                        line_number);
-                return 0;
-            }
-
-            /* קריאת כל הספרות */
-            while (isdigit(*p))
-                p++;
-
-            expect_number = 0;
-        }
-
-        /* רווחים אחרי מספר */
-        while (*p == ' ' || *p == '\t')
-            p++;
-
-        /* סוף המחרוזת */
-        if (*p == '\0')
-            return 1;
-
-        /* חייב להיות פסיק */
-        if (*p != ',') {
-            fprintf(stderr,
-                    "Error in line %d: Missing comma between numbers\n",
-                    line_number);
-            return 0;
-        }
-
-        /* נמצא פסיק */
-        p++;
-
-        /* רווחים אחרי פסיק */
-        while (*p == ' ' || *p == '\t')
-            p++;
-
-        /* פסיק אחרי הפסיק הראשון */
-        if (*p == ',') {
-            fprintf(stderr,
-                    "Error in line %d: Multiple consecutive commas\n",
-                    line_number);
-            return 0;
-        }
-
-        /* פסיק בסוף */
-        if (*p == '\0') {
-            fprintf(stderr,
-                    "Error in line %d: Comma after the last number\n",
-                    line_number);
-            return 0;
-        }
-
-        expect_number = 1;
+    /* 1. בדיקה שקיימים פרמטרים בשורה */
+    if (*ptr == '\0') {
+        fprintf(stderr, "Error in line %d: Missing arguments for data directive.\n", line_number);
+        return 0;
     }
+
+    /* 2. איסור פסיק מוביל לפני המספר הראשון */
+    if (*ptr == ',') {
+        fprintf(stderr, "Error in line %d: Illegal leading comma before the first number.\n", line_number);
+        return 0;
+    }
+
+    while (*ptr != '\0') {
+        if (expecting_number) {
+            /* קריאת מספר שלם (כולל סימן + או -) */
+            errno = 0;
+            value = strtoll(ptr, &endptr, 10);
+
+            /* אם לא זוהתה ספרה/סימן חוקי */
+            if (ptr == endptr) {
+                fprintf(stderr, "Error in line %d: Expected an integer but found '%c'.\n", line_number, *ptr);
+                return 0;
+            }
+
+            /* בדיקת טווח הייצוג לפי סוג ההנחיה */
+            if (type == DIRECTIVE_DB) {
+                if (value < MIN_DB || value > MAX_DB) {
+                    fprintf(stderr, "Error in line %d: Value %lld exceeds 8-bit range [%d, %d] for .db.\n",
+                            line_number, value, MIN_DB, MAX_DB);
+                    return 0;
+                }
+            } else if (type == DIRECTIVE_DH) {
+                if (value < MIN_DH || value > MAX_DH) {
+                    fprintf(stderr, "Error in line %d: Value %lld exceeds 16-bit range [%d, %d] for .dh.\n",
+                            line_number, value, MIN_DH, MAX_DH);
+                    return 0;
+                }
+            } else if (type == DIRECTIVE_DW) {
+                if (value < MIN_DW || value > MAX_DW || errno == ERANGE) {
+                    fprintf(stderr, "Error in line %d: Value %lld exceeds 32-bit range for .dw.\n",
+                            line_number, value);
+                    return 0;
+                }
+            }
+
+            count++;
+            ptr = skip_spaces(endptr);
+            expecting_number = 0; /* קראנו מספר בהצלחה, כעת מצפים לפסיק או לסיום */
+        } else {
+            /* בדיקת תקינות הפסיק המפריד */
+            if (*ptr == ',') {
+                ptr++;
+                ptr = skip_spaces(ptr);
+
+                /* איסור פסיקים ברצף */
+                if (*ptr == ',') {
+                    fprintf(stderr, "Error in line %d: Multiple consecutive commas.\n", line_number);
+                    return 0;
+                }
+                /* איסור פסיק נגרר בסוף השורה */
+                if (*ptr == '\0') {
+                    fprintf(stderr, "Error in line %d: Illegal trailing comma at end of line.\n", line_number);
+                    return 0;
+                }
+
+                expecting_number = 1; /* מוכנים לקריאת המספר הבא */
+            } else {
+                fprintf(stderr, "Error in line %d: Missing comma between numbers or invalid character '%c'.\n",
+                        line_number, *ptr);
+                return 0;
+            }
+        }
+    }
+
+    return 1;
+}
 }
 /*
 int check_directive_parameter(char *parameters, int line_number){

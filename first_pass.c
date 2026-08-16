@@ -5,9 +5,9 @@
 #include "symbol_table.h"
 
 BYTE *code_image = NULL;
-int code_capacity = 0;
+int code_capacity = 10;
 BYTE *data_image = NULL;
-int data_capacity = 0;
+int data_capacity = 100;
 int IC = 100;
 int DC = 0;
 int ICF = 0;
@@ -54,6 +54,7 @@ while(fgets(line, sizeof(line), fp) != NULL){
         word[0] = '\0';
         command_name[0] = '\0';
         label_name[0] = '\0';
+        bytes_read = 0;
         if(is_empty_or_comment(line) == 0){
             if(sscanf(line, "%s %n", word, &bytes_read ) == 1) /* Extract the first word from the line */{
                 if (word[strlen(word) - 1] == ':'){
@@ -149,7 +150,7 @@ while(fgets(line, sizeof(line), fp) != NULL){
     } 
     DCF = DC;
     ICF = IC;
-    update_data_symbol_table(&symbol_table, &symbol_count, &symbol_capacity, ICF);
+    update_data_symbol_table(symbol_table, symbol_count, ICF);
     return 1; 
 }
       

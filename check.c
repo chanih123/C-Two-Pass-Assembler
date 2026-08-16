@@ -1,25 +1,48 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+/*
 
-/* הצהרת הפונקציה */
+int main(void)
+{
+    #include <stdio.h>
+
+
 int check_directive_parameter(char *parameters, int line_number);
 
 int main(void)
 {
-    char input[256];
-    int line_number = 1;
+    char *tests[] = {
+        "5",
+        "5,6",
+        "5 , 6",
+        "5 , -10 , +3",
+        ",5",
+        "5,",
+        "5,,6",
+        "5 6",
+        "abc",
+        "5,a",
+        "+",
+        "-",
+        "1,2,3,4",
+        "1, 2, ,3",
+        "1 ,2,3,",
+        "   10\t,\t20   ",
+        ""
+    };
 
-    while (1)
+    int num_tests = sizeof(tests) / sizeof(tests[0]);
+    int i;
+
+    for (i = 0; i < num_tests; i++)
     {
+        printf("Test %d: \"%s\"\n", i + 1, tests[i]);
 
-        if (check_directive_parameter("6, -9", line_number))
-            printf("Valid parameters!\n");
+        if (check_directive_parameter(tests[i], i + 1))
+            printf("Result: VALID\n");
 
-        line_number++;
-        if (check_directive_parameter("10203", line_number))
-            printf("Valid parameters!\n");
-        printf("\n");
+        printf("----------------------------------\n");
     }
 
     return 0;
@@ -29,11 +52,11 @@ int check_directive_parameter(char *parameters, int line_number)
     char *p = parameters;
     int expect_number = 1;
 
-    /* דילוג על רווחים בתחילת השורה */
+
     while (*p == ' ' || *p == '\t')
         p++;
 
-    /* אין פרמטרים */
+
     if (*p == '\0') {
         fprintf(stderr, "Error in line %d: Missing parameter\n", line_number);
         return 0;
@@ -43,7 +66,7 @@ int check_directive_parameter(char *parameters, int line_number)
 
         if (expect_number) {
 
-            /* פסיק לפני המספר הראשון או אחרי פסיק */
+
             if (*p == ',') {
                 fprintf(stderr,
                         "Error in line %d: Comma before the first number\n",
@@ -51,11 +74,11 @@ int check_directive_parameter(char *parameters, int line_number)
                 return 0;
             }
 
-            /* סימן אופציונלי */
+
             if (*p == '+' || *p == '-')
                 p++;
 
-            /* חייבת להיות לפחות ספרה אחת */
+
             if (!isdigit(*p)) {
                 fprintf(stderr,
                         "Error in line %d: Illegal number\n",
@@ -63,22 +86,22 @@ int check_directive_parameter(char *parameters, int line_number)
                 return 0;
             }
 
-            /* קריאת כל הספרות */
+
             while (isdigit(*p))
                 p++;
 
             expect_number = 0;
         }
 
-        /* רווחים אחרי מספר */
+
         while (*p == ' ' || *p == '\t')
             p++;
 
-        /* סוף המחרוזת */
+
         if (*p == '\0')
             return 1;
 
-        /* חייב להיות פסיק */
+
         if (*p != ',') {
             fprintf(stderr,
                     "Error in line %d: Missing comma between numbers\n",
@@ -86,14 +109,14 @@ int check_directive_parameter(char *parameters, int line_number)
             return 0;
         }
 
-        /* נמצא פסיק */
+
         p++;
 
-        /* רווחים אחרי פסיק */
+
         while (*p == ' ' || *p == '\t')
             p++;
 
-        /* פסיק אחרי הפסיק הראשון */
+
         if (*p == ',') {
             fprintf(stderr,
                     "Error in line %d: Multiple consecutive commas\n",
@@ -101,7 +124,7 @@ int check_directive_parameter(char *parameters, int line_number)
             return 0;
         }
 
-        /* פסיק בסוף */
+
         if (*p == '\0') {
             fprintf(stderr,
                     "Error in line %d: Comma after the last number\n",
@@ -163,4 +186,5 @@ void blanks_remove(char str[]){
     }
     }
     str[i +1] = '\0';
-}
+}*/
+
