@@ -1,25 +1,21 @@
 ; === Test 3: Complex Symbol Flow, White Spaces and Externs ===
 
-; Several empty and commented lines to test parser robustness
+; Empty and commented lines to test parser robustness
 
-    .extern GLOBAL_VAL
-    .extern EXTERNAL_ROUTINE
+    .extern GLOBALVAL
+    .extern EXTERNALROUTINE
     
-    .entry  LONG_LABEL_NAME_FOR_TESTING_31C
-    .entry  DATA_LABEL_AFTER
+    .entry  LONGLABELNAMEFORTESTING31CHARA
+    .entry  DATALABELAFTER
 
-MAIN_BLOCK: 
-    add     $1,  $2,  $3
-    la      GLOBAL_VAL
-    call    EXTERNAL_ROUTINE
+MAINBLOCK:  add     $1,  $2,  $3
+            la      GLOBALVAL
+            call    EXTERNALROUTINE
 
-LONG_LABEL_NAME_FOR_TESTING_31C:
-    move    $4, $5
-    call    EXTERNAL_ROUTINE
-    jmp     END_PROGRAM
+LONGLABELNAMEFORTESTING31CHARA: move    $4, $5
+            call    EXTERNALROUTINE
+            jmp     ENDPROGRAM
 
-DATA_LABEL_AFTER:
-    .asciz  "Edge Case OK"
+DATALABELAFTER: .asciz "Edge Case OK"
 
-END_PROGRAM:
-    hlt
+ENDPROGRAM: hlt

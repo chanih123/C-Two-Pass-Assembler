@@ -1,5 +1,5 @@
 ; === Test 1: Data Directives and Extreme Numerical Values ===
-DATA_START: .db    127, -128, 0, -1
+DATASTART: .db    127, -128, 0, -1
             .dh    32767, -32768, 0, -5
 STR1:       .asciz "Hello, World!"
             .dw    2147483647, -2147483648, 0
@@ -8,5 +8,5 @@ MAIN:       add    $1, $2, $3
             ori    $4, 100, $5
             hlt
 
-DATA_END:   .db    -1
+DATAEND:   .db    -1
             .asciz ""

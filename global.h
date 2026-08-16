@@ -29,6 +29,12 @@ typedef struct{
   int opcode;
 } instruction;
 extern instruction instructions [];
+
+typedef enum {
+    DIRECTIVE_DB,
+    DIRECTIVE_DH,
+    DIRECTIVE_DW
+} DirectiveType;
   
 #endif
 

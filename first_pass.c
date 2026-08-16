@@ -7,7 +7,7 @@
 BYTE *code_image = NULL;
 int code_capacity = 10;
 BYTE *data_image = NULL;
-int data_capacity = 100;
+int data_capacity = 0;
 int IC = 100;
 int DC = 0;
 int ICF = 0;
@@ -92,14 +92,18 @@ while(fgets(line, sizeof(line), fp) != NULL){
                               enter_asciz_to_data_image(parameters);
                        }
                        else{
-                          if(check_directive_parameter(parameters, line_number)){
-                              if(strcmp(command_name, ".db") == 0)
-                                  enter_to_data_image(parameters, 1);
-                              if(strcmp(command_name, ".dh") == 0)
+                            if(strcmp(command_name, ".db") == 0){
+                                if(check_directive_parameter(parameters, DIRECTIVE_DB, line_number))
+                                    enter_to_data_image(parameters, 1);
+                            }
+                            if(strcmp(command_name, ".dh") == 0){
+                              if(check_directive_parameter(parameters, DIRECTIVE_DH, line_number))
                                   enter_to_data_image(parameters, 2);
-                              if(strcmp(command_name, ".dw") == 0)
+                            }
+                            if(strcmp(command_name, ".dw") == 0){
+                              if(check_directive_parameter(parameters, DIRECTIVE_DW, line_number))
                                   enter_to_data_image(parameters, 4);
-                          } /* end if(check_directive_parameter*/ 
+                            }
                         } /*end else */
                      continue;
                     } /* end - if(is_data_directive(next_part)) */

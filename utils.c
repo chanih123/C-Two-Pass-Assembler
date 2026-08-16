@@ -163,7 +163,7 @@ if((opcode == 0 && count != 3) || (opcode == 1 && count != 2)){
   fprintf(stderr, "Error in line %d: Invalid number of registers\n", line_number);
   return 0;
 }
-if(IC + 4 >= code_capacity){
+while(IC + 4 >= code_capacity){
      code_capacity = (code_capacity == 0) ? 100 : code_capacity * 2;
      temp = (BYTE *) realloc(code_image, code_capacity * sizeof(BYTE));
      if(temp == NULL){
@@ -235,7 +235,7 @@ if(reg != NULL){
   fprintf(stderr, "Error in line %d: Superfluous parameters\n", line_number);
   return 0;
 }
-if(IC + 4 >= code_capacity){
+while(IC + 4 >= code_capacity){
      code_capacity = (code_capacity == 0) ? 100 : code_capacity * 2;
      temp = (BYTE *) realloc(code_image, code_capacity * sizeof(BYTE));
      if(temp == NULL){
@@ -293,7 +293,7 @@ if(reg != NULL){
   fprintf(stderr, "Error in line %d: Superfluous parameters\n", line_number);
   return 0;
 }
-if(IC + 4 >= code_capacity){
+while(IC + 4 >= code_capacity){
      code_capacity = (code_capacity == 0) ? 100 : code_capacity * 2;
      temp = (BYTE *) realloc(code_image, code_capacity * sizeof(BYTE));
      if(temp == NULL){
@@ -354,15 +354,21 @@ while(parameters[i] != '\0' && parameters[i] != '\n'){
 }
 return 1;
 }  
+const char* skip_spaces(const char *ptr){
+    if (ptr == NULL){
+        return NULL;
+    }
+    while (*ptr != '\0' && isspace((unsigned char)*ptr)){
+        ptr++;
+    }
+    return ptr;
+}
 
-int check_directive_parameter(char *parameters, int line_number)
-{
 int check_directive_parameter(const char *line, DirectiveType type, int line_number) {
     const char *ptr;
     char *endptr;
-    long long value;
+    long value; /* שימוש ב-long התואם לתקן C90 */
     int expecting_number;
-    int count;
 
     if (line == NULL) {
         fprintf(stderr, "Error in line %d: Null pointer provided.\n", line_number);
@@ -371,15 +377,14 @@ int check_directive_parameter(const char *line, DirectiveType type, int line_num
 
     ptr = skip_spaces(line);
     expecting_number = 1;
-    count = 0;
 
-    /* 1. בדיקה שקיימים פרמטרים בשורה */
+    /* בדיקה האם יש ארגומנטים בשורה */
     if (*ptr == '\0') {
         fprintf(stderr, "Error in line %d: Missing arguments for data directive.\n", line_number);
         return 0;
     }
 
-    /* 2. איסור פסיק מוביל לפני המספר הראשון */
+    /* איסור פסיק מוביל לפני המספר הראשון */
     if (*ptr == ',') {
         fprintf(stderr, "Error in line %d: Illegal leading comma before the first number.\n", line_number);
         return 0;
@@ -387,58 +392,55 @@ int check_directive_parameter(const char *line, DirectiveType type, int line_num
 
     while (*ptr != '\0') {
         if (expecting_number) {
-            /* קריאת מספר שלם (כולל סימן + או -) */
             errno = 0;
-            value = strtoll(ptr, &endptr, 10);
+            /* שימוש בפונקציה התקנית strtol */
+            value = strtol(ptr, &endptr, 10);
 
-            /* אם לא זוהתה ספרה/סימן חוקי */
+            /* אם לא נקרא מספר */
             if (ptr == endptr) {
                 fprintf(stderr, "Error in line %d: Expected an integer but found '%c'.\n", line_number, *ptr);
                 return 0;
             }
 
-            /* בדיקת טווח הייצוג לפי סוג ההנחיה */
+            /* בדיקת טווחי ייצוג (Two's Complement) */
             if (type == DIRECTIVE_DB) {
                 if (value < MIN_DB || value > MAX_DB) {
-                    fprintf(stderr, "Error in line %d: Value %lld exceeds 8-bit range [%d, %d] for .db.\n",
+                    fprintf(stderr, "Error in line %d: Value %ld exceeds 8-bit range [%d, %d] for .db.\n",
                             line_number, value, MIN_DB, MAX_DB);
                     return 0;
                 }
             } else if (type == DIRECTIVE_DH) {
                 if (value < MIN_DH || value > MAX_DH) {
-                    fprintf(stderr, "Error in line %d: Value %lld exceeds 16-bit range [%d, %d] for .dh.\n",
+                    fprintf(stderr, "Error in line %d: Value %ld exceeds 16-bit range [%d, %d] for .dh.\n",
                             line_number, value, MIN_DH, MAX_DH);
                     return 0;
                 }
             } else if (type == DIRECTIVE_DW) {
                 if (value < MIN_DW || value > MAX_DW || errno == ERANGE) {
-                    fprintf(stderr, "Error in line %d: Value %lld exceeds 32-bit range for .dw.\n",
+                    fprintf(stderr, "Error in line %d: Value %ld exceeds 32-bit range for .dw.\n",
                             line_number, value);
                     return 0;
                 }
             }
 
-            count++;
             ptr = skip_spaces(endptr);
-            expecting_number = 0; /* קראנו מספר בהצלחה, כעת מצפים לפסיק או לסיום */
+            expecting_number = 0;
         } else {
-            /* בדיקת תקינות הפסיק המפריד */
+            /* בדיקת פסיק מפריד */
             if (*ptr == ',') {
                 ptr++;
                 ptr = skip_spaces(ptr);
 
-                /* איסור פסיקים ברצף */
                 if (*ptr == ',') {
                     fprintf(stderr, "Error in line %d: Multiple consecutive commas.\n", line_number);
                     return 0;
                 }
-                /* איסור פסיק נגרר בסוף השורה */
                 if (*ptr == '\0') {
                     fprintf(stderr, "Error in line %d: Illegal trailing comma at end of line.\n", line_number);
                     return 0;
                 }
 
-                expecting_number = 1; /* מוכנים לקריאת המספר הבא */
+                expecting_number = 1;
             } else {
                 fprintf(stderr, "Error in line %d: Missing comma between numbers or invalid character '%c'.\n",
                         line_number, *ptr);
@@ -449,60 +451,6 @@ int check_directive_parameter(const char *line, DirectiveType type, int line_num
 
     return 1;
 }
-}
-/*
-int check_directive_parameter(char *parameters, int line_number){
-int i = 0;
-int expect_number = 1; 
-int has_number = 0;
-int length = strlen(parameters);
-while(i < length){    
-    if(parameters[i] == '\t' || parameters[i] == ' '){
-      i++;
-      continue;
-    }
-     if(parameters[i] == ','){
-         if(expect_number == 1){
-            if(has_number == 0)
-              fprintf(stderr, "Error in line %d: Comma before the first number\n", line_number);
-            else
-                fprintf(stderr, "Error in line %d: Invalid Comma\n", line_number);
-            return 0;
-         }
-         expect_number = 1;
-         i++;
-         continue;
-    } end - if(parameters[i] == ',')
-    if(expect_number == 1){
-       if(parameters[i] == '+' || parameters[i] == '-')
-          i++;
-       if(i >= length || parameters[i] < '0' || parameters[i] > '9') {
-          fprintf(stderr, "Error in line %d: Expected digits for number\n", line_number);
-           return 0;
-        }
-        while(i < length && parameters[i] >= '0' && parameters[i] <= '9')
-              i++;
-        has_number = 1; 
-        expect_number = 0;
-        continue;
-    }
-    if((parameters[i] >= '0' && parameters[i] <= '9') || parameters[i] == '+' || parameters[i] == '-'){
-        fprintf(stderr, "Error in line %d: Missing comma between numbers\n", line_number);
-        return 0;
-    }
-    fprintf(stderr, "Error in line %d: Invalid character\n", line_number);
-        return 0;
-   
-}
-if(expect_number == 1){
-  if(!has_number) 
-      fprintf(stderr, "Error in line %d: No parameters provided\n", line_number);
-  else
-      fprintf(stderr, "Error in line %d: Comma after the last number\n", line_number);
-  return 0;
-}
-return 1;
-}*/
 void enter_to_data_image(char *parameters, int size){
 char *p = (char *)parameters;
 char *end;
@@ -510,12 +458,14 @@ long num;
 long part;
 BYTE *temp;
 while(*p != '\0'){
-      while(*p == ' ' || *p == ','){
+      while(*p != '\0' && (isspace((unsigned char)*p) || *p == ',')){
           p++;
       }
       if(*p == '\0') 
           break;
       num = strtol(p, &end, 10);
+      if(p == end)
+          break;
       while(DC + size >= data_capacity){
           data_capacity = (data_capacity == 0) ? 100 : data_capacity * 2;
           temp = (BYTE *) realloc(data_image, data_capacity * sizeof(BYTE));
@@ -555,7 +505,7 @@ while(*p != '\0'){
 void enter_asciz_to_data_image(char *parameters){
 int i = 0;
 BYTE *temp;
-while(DC + strlen(parameters) >= data_capacity){
+while(DC + strlen(parameters) + 1 >= data_capacity){
       data_capacity = (data_capacity == 0) ? 100 : data_capacity * 2;
       temp = (BYTE *) realloc(data_image, data_capacity * sizeof(BYTE));
       if(temp == NULL){
