@@ -1,161 +1,185 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "global.h"
 #include "utils.h"
 #include "symbol_table.h"
+#include "first_pass.h"
 
-BYTE *code_image = NULL;
-int code_capacity = 10;
-BYTE *data_image = NULL;
-int data_capacity = 0;
-int IC = 100;
-int DC = 0;
-int ICF = 0;
-int DCF = 0;
-int symbol_capacity = 10;
-int symbol_count = 0;
+/**
+ * Executes the first pass of the assembler.
+ * Parses lines, builds the symbol table, and encodes data directives.
+ *
+ * @param filename The path to the source assembly file (.am).
+ * @return 1 on success, 0 if errors were encountered.
+ */
+int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf){
 
-int run_first_pass(char *filename){
+  int opcode = 0;
+  int funct = 0;
+  int line_number = 0;
+  int bytes_read = 0;
+  int error_found = 0;
+  int there_is_label = 0;
 
-int opcode = 0;
-int funct = 0;
-int line_number = 0;
-int bytes_read = 0;
-int error_found = 0;
+  char line[MAX_LINE_LENGTH];
+  char word[MAX_LINE_LENGTH];
+  char label_name[MAX_LABEL_LENGTH];
+  char command_name[MAX_LABEL_LENGTH];
+  char ext_label[MAX_LABEL_LENGTH];
+  char *parameters = NULL;
+  char *next_part = NULL;
 
+  FILE *fp = NULL;
 
-int there_is_label = 0;
-
-char line[1024];
-char word[1024];
-char label_name[1024];
-char command_name[1024];
-char ext_label[32];
-char *parameters;
-char *next_part;
-
-FILE *fp;
-
-Symbol *symbol_table = init_symbol_table(symbol_capacity);
-data_image = (BYTE *) malloc(data_capacity * sizeof(BYTE));
-if (data_image == NULL) {
-    fprintf(stderr, "Fatal Error: Memory allocation failed for Data Image\n");
-    exit(1);
-}
-fp = fopen(filename, "r");
-if(fp == NULL){
-    fprintf(stderr, "Fatal Error: The file does not exist.\n");
-    exit(1);
-}
-while(fgets(line, sizeof(line), fp) != NULL){
-    /* Read a full line from standard input safely */
+  fp = fopen(filename, "r");
+  if(fp == NULL){
+      fprintf(stderr, "Fatal Error: The file does not exist.\n");
+      return 0;
+  }
+  
+  /* Reset counters for the current file */
+  IC = IC_INIT_VALUE;
+  DC = 0;
+  
+  /* Process the source file line by line */
+  while(fgets(line, sizeof(line), fp) != NULL){
         line_number++;
         there_is_label = 0;
         word[0] = '\0';
         command_name[0] = '\0';
         label_name[0] = '\0';
         bytes_read = 0;
-        if(is_empty_or_comment(line) == 0){
-            if(sscanf(line, "%s %n", word, &bytes_read ) == 1) /* Extract the first word from the line */{
-                if (word[strlen(word) - 1] == ':'){
-                    label_name[strlen(label_name) -1] = '\0';
-                    if(is_valid_label(word, line_number) == 0){
-                        error_found++;
-                        continue;
-                    }
-                    there_is_label = 1;
-                    strcpy(label_name, word);
-                    next_part = line + bytes_read;
-                    if(sscanf(next_part, "%s %n", command_name, &bytes_read) != 1){
-                        fprintf(stderr, "Error in line %d: There is no command name.\n", line_number);
-                        error_found++;
-                        continue;
-                    }
-                    parameters = next_part + bytes_read;
-                    if((has_parameters(parameters) == 0) && (strcmp(command_name, "hlt") == 1)){
-                        fprintf(stderr, "Error in line %d: There is no parameters\n", line_number);
-                        error_found++;
-                        continue;
-                    }
-                } /* end - (word[length - 1] == ':')*/
-                else{
-                    strcpy(command_name, word);
-                    parameters = line + bytes_read;
-                }
-                if(is_data_directive(command_name)){
-                    if(there_is_label == 1){
-                        if(add_symbol(&symbol_table, &symbol_count, &symbol_capacity, label_name, DC, data, 0, line_number) != 1)
-                          error_found++;
-                    }
-                       if(strcmp(command_name, ".asciz") == 0){
-                          if(check_asciz_parameter(parameters, line_number))
-                              enter_asciz_to_data_image(parameters);
-                       }
-                       else{
-                            if(strcmp(command_name, ".db") == 0){
-                                if(check_directive_parameter(parameters, DIRECTIVE_DB, line_number))
-                                    enter_to_data_image(parameters, 1);
-                            }
-                            if(strcmp(command_name, ".dh") == 0){
-                              if(check_directive_parameter(parameters, DIRECTIVE_DH, line_number))
-                                  enter_to_data_image(parameters, 2);
-                            }
-                            if(strcmp(command_name, ".dw") == 0){
-                              if(check_directive_parameter(parameters, DIRECTIVE_DW, line_number))
-                                  enter_to_data_image(parameters, 4);
-                            }
-                        } /*end else */
-                     continue;
-                    } /* end - if(is_data_directive(next_part)) */
-                if((strcmp(command_name, ".entry") == 0))
-                    continue;
-                if((strcmp(command_name, ".extern") == 0)){
-                    if(parameters != NULL){
-                       if(sscanf(parameters, "%s", ext_label) == 1){
-                          if(add_symbol(&symbol_table, &symbol_count, &symbol_capacity, ext_label, 0, external, 0, line_number) == 0)
-                              error_found++;
-                       }
-                    }
+        
+        /* Skip empty lines and comment lines */
+        if(is_empty_or_comment(line))
+            continue;
+        
+        /* Read the first token in the line */
+        if(sscanf(line, "%s %n", word, &bytes_read ) != 1) 
+            continue;
+            
+        /* Check if the first word is a label definition */
+        if(word[strlen(word) - 1] == ':'){
+            word[strlen(word) -1] = '\0'; /* Remove the colon */
+            
+            if(!is_valid_label(word, line_number)){
+                error_found++;
                 continue;
-                } /* end if((strcmp(command_name, ".extern")*/ 
-                if(there_is_label == 1){
-                    if(add_symbol(&symbol_table, &symbol_count, &symbol_capacity, label_name, IC, code, 0, line_number) == 0)
-                      error_found++;
-                }
-                opcode = get_opcode(command_name);
-                if(opcode == -1){
-                    fprintf(stderr, "Error in line %d: Invalid command name\n", line_number);
+            }
+            
+            there_is_label = 1;
+            strcpy(label_name, word);
+            
+            /* Read the command following the label */
+            next_part = line + bytes_read;
+            if(sscanf(next_part, "%s %n", command_name, &bytes_read) != 1){
+                fprintf(stderr, "Error in line %d: There is no command name.\n", line_number);
+                error_found++;
+                continue;
+            }
+            parameters = next_part + bytes_read;
+            
+            /* Verify that non-hlt commands have parameters */
+            if((!has_parameters(parameters)) && (strcmp(command_name, "hlt") != 0)){
+                fprintf(stderr, "Error in line %d: There is no parameters\n", line_number);
+                error_found++;
+                continue;
+            }
+        } /* end - (word[length - 1] == ':')*/
+        else{
+            /* No label: the first word is the command name */
+            strcpy(command_name, word);
+            parameters = line + bytes_read;
+        }
+        
+        /* 1. Handle data storage directives (.db, .dh, .dw, .asciz) */
+        if(is_data_directive(command_name)){
+            if(there_is_label == 1){
+                if(!add_symbol(label_name, DC, data, line_number))
+                     error_found++;
+            }
+            if(strcmp(command_name, DIRECTIVE_ASCIZ_STR) == 0){
+                if(check_asciz_parameter(parameters, line_number))
+                    enter_asciz_to_data_image(parameters);
+               else
                     error_found++;
-                }
-                else{
-                    if(opcode == 0 || opcode == 1){
-                        funct = get_funct(command_name);
-                        if(check_and_enter_R_function_parameter(parameters, opcode, funct, line_number) == 0)
+            }
+            else if(strcmp(command_name, DIRECTIVE_DB_STR) == 0){
+                    if(check_directive_parameter(parameters, DIRECTIVE_DB, line_number))
+                        enter_to_data_image(parameters, 1);
+                    else
+                        error_found++;
+            }
+            else if(strcmp(command_name, DIRECTIVE_DH_STR) == 0){
+                     if(check_directive_parameter(parameters, DIRECTIVE_DH, line_number))
+                          enter_to_data_image(parameters, 2);
+                     else
                           error_found++;
-                    }
-                    else{
-                    if(opcode >= 10 && opcode <= 24){
-                       if(check_and_enter_I_function_parameter(parameters, opcode, line_number) == 0)
+            }
+            else if(strcmp(command_name, DIRECTIVE_DW_STR) == 0){
+                    if(check_directive_parameter(parameters, DIRECTIVE_DW, line_number))
+                        enter_to_data_image(parameters, 4);
+                    else
+                        error_found++;
+            }
+            continue;
+        } /* end - if(is_data_directive(next_part)) */
+        
+        /* 2. Handle entry directives (processed in second pass) */
+        if((strcmp(command_name, ".entry") == 0))
+            continue;
+            
+        /* 3. Handle external symbol directives */
+        if((strcmp(command_name, ".extern") == 0)){
+            if(parameters != NULL && sscanf(parameters, "%s", ext_label) == 1){
+                 if(!add_symbol(ext_label, 0, external, line_number))
+                    error_found++;
+            }
+            continue;
+        }
+        
+        /* 4. Handle instruction statements */
+        if(there_is_label == 1){
+            if(!add_symbol(label_name, IC, code, line_number))
+                  error_found++;
+        }
+        
+        opcode = get_opcode(command_name);
+        if(opcode == -1){
+            fprintf(stderr, "Error in line %d: Invalid command name\n", line_number);
+            error_found++;
+        }
+        else{
+             /* Parse instruction by type (R, I, or J) */
+             if(opcode == OPCODE_R_MATH || opcode == OPCODE_R_COPY){
+                 funct = get_funct(command_name);
+                 if(!check_and_enter_R_function_parameter(parameters, opcode, funct, line_number))
+                     error_found++;
+             }
+             else if(opcode >= MIN_I_OPCODE && opcode <= MAX_I_OPCODE){
+                      if(!check_and_enter_I_function_parameter(parameters, opcode, line_number))
                           error_found++;
-                    }
-                    else{
-                       if(check_end_enter_J_function_parameter(parameters, opcode, line_number) == 0)
+             }
+             else if(check_end_enter_J_function_parameter(parameters, opcode, line_number) == 0)
                        error_found++;
-                    }
-                    }
-                }/*end else*/  
-            } /* end if(sscanf(line, "%s %n", word, &bytes_read ) == 1) */
-        }/* end - if(is_empty_or_comment(line) == 0)*/
-  }/*end FOREVER*/
-    fclose(fp);
-    if(error_found > 0){
+          }
+      }
+  
+  fclose(fp);
+  
+  /* Stop processing if errors were encountered during the first pass */
+  if(error_found > 0){
       fprintf(stderr, "%d errors found during first pass in file %s. Skipping second pass.\n", error_found, filename);
       return 0;
-    } 
-    DCF = DC;
-    ICF = IC;
-    update_data_symbol_table(symbol_table, symbol_count, ICF);
-    return 1; 
+  } 
+  
+  /* Save final counter values and adjust data symbol addresses */
+  *dcf = DC;
+  *icf = IC;
+  update_data_symbol_table(IC);
+  
+  return 1; 
 }
       
         

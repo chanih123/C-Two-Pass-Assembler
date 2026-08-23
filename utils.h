@@ -1,44 +1,115 @@
 #ifndef UTILS_H
 #define UTILS_H
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <errno.h>
 #include <stddef.h>
 #include "global.h"
 
+/** Return status when a command name is not found in the instruction table. */
+#define CMD_NOT_FOUND -1
 
+/** Total number of supported machine instructions (R, I, J types). */
+#define NUM_OF_INSTRUCTIONS 27
 
-#define MIN_DB (-128)
-#define MAX_DB (127)
+#define MEMORY_WORD_SIZE 4
 
-#define MIN_DH (-32768)
-#define MAX_DH (32767)
+/** Maximum string length of an instruction mnemonic name (e.g., "addi", "call"). */
+#define MAX_INSTRUCTION_NAME_LENGTH 5
 
-#define MIN_DW (-2147483648L)
-#define MAX_DW (2147483647L)
+/* Directive name constants */
+#define DIRECTIVE_DH_STR    ".dh"
+#define DIRECTIVE_DW_STR   ".dw"
+#define DIRECTIVE_DB_STR    ".db"
+#define DIRECTIVE_ASCIZ_STR ".asciz"
 
+/* Bit shift amounts for R-type instruction fields */
+#define OPCODE_SHIFT    26
+#define RS_SHIFT        21
+#define RT_SHIFT        16
+#define RD_SHIFT        11
+#define FUNCT_SHIFT     6
 
-int is_empty_or_comment(char *line);
-int is_data_directive(char *word);
-int is_valid_label(char *word, int line_number);
-int get_opcode(char * name);
+/* Field bitmasks */
+#define OPCODE_MASK     0x3F
+#define REG_MASK        0x1F
+#define FUNCT_MASK      0x1F
+#define BYTE_MASK       0xFF
+#define IMMED_16BIT_MASK 0xFFFF
 
+/* Expected register operand counts */
+#define R_ARITHMETIC_REG_COUNT 3
+#define R_COPY_REG_COUNT       2
+
+/* 16-bit signed integer limits for I-type immediate field */
+#define MIN_IMMED_VAL  -32768
+#define MAX_IMMED_VAL   32767
+
+/* Opcode ranges for I-type instructions */
+#define MIN_I_MATH_OPCODE 10
+#define MAX_I_MATH_OPCODE 14
+#define MIN_I_BRANCH_OPCODE 15
+#define MAX_I_BRANCH_OPCODE 18
+#define MIN_I_LOAD_STORE_OPCODE 19
+#define MAX_I_LOAD_STORE_OPCODE 24
+
+/* Opcode definitions for J-type instructions */
+#define OPCODE_JMP  30
+#define OPCODE_LA   31
+#define OPCODE_CALL 32
+#define OPCODE_HLT  63
+
+/* J-type register bit flag and shift */
+#define J_REG_FLAG_SHIFT 25
+#define J_ADDRESS_MASK   0x1FFFFFF
+
+/* Register definitions */
+#define REGISTER_PREFIX   '$'
+#define MIN_REGISTER_NUM  0
+#define MAX_REGISTER_NUM  31
+#define INVALID_REGISTER -1
+
+#define STRING_QUOTE '"'
+
+/* Data directive numerical ranges */
+#define MIN_DB -128
+#define MAX_DB 127
+#define MIN_DH -32768
+#define MAX_DH 32767
+#define MIN_DW -2147483648L
+#define MAX_DW 2147483647L
+
+#define BITS_IN_BYTE 8
+
+/** Instruction classification category (R, I, or J). */
+typedef enum {R,I,J} type;
+
+/**
+ * Metadata representation of a supported machine instruction.
+ */
+typedef struct{
+  char name[MAX_INSTRUCTION_NAME_LENGTH +1];
+  type op_type;
+  int funct;
+  int opcode;
+} instruction;
+extern instruction instructions [];
+
+/* Utils Interface Functions */
 
 int get_opcode(char *name);
 int get_funct(char *name);
 int has_parameters(char *str);
+int is_reserved_keyword(char *name);
 int is_valid_label(char *word, int line_number);
 int is_data_directive(char *command_name);
 int is_empty_or_comment(char *line);
 int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct, int line_number);
+void insert_to_code_image(unsigned int word);
 int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_number);
 int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_number);
 int check_register(char *reg, int line_number);
 int check_asciz_parameter(char *parameters, int line_number);
-const char* skip_spaces(const char *ptr);
-int check_directive_parameter(const char *line, DirectiveType type, int line_number);
+char* skip_spaces(char *ptr);
+int check_directive_parameter(char *line, DirectiveType type, int line_number);
 void enter_to_data_image(char *parameters, int size);
 void enter_asciz_to_data_image(char *parameters);
+
 #endif

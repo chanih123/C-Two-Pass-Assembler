@@ -1,12 +1,16 @@
 #include <stdio.h>
 #include <string.h>
-#include "utils.h"
-#include "global.h"
 #include <stdlib.h>
 #include <ctype.h>
+#include <errno.h>
+#include "utils.h"
+#include "global.h"
+#include "first_pass.h"
 
-/*לחשוב איפה הכי טוב לכתוב את זה*/
-
+/**
+ * Fixed lookup table containing all 27 supported machine instructions,
+ * their operation types (R, I, J), funct values, and opcodes.
+ */
 instruction instructions[] = {
     {"add", R, 1, 0},
     {"sub", R, 2, 0},
@@ -36,438 +40,644 @@ instruction instructions[] = {
     {"call",J, 0, 32},
     {"hlt", J, 0, 63}
 };
+
+/**
+ * Looks up an instruction name in the instructions table.
+ * 
+ * @param name The name of the command to search for.
+ * @return The opcode of the instruction if found, or -1 (CMD_NOT_FOUND) otherwise.
+ */
 int get_opcode(char *name)
 {
-  int i = 0;
-  while(i < sizeof(instructions)/sizeof(instruction))
-  {
-    if(strcmp(name,instructions[i].name)==0)
-    {
-      return instructions[i].opcode;
-    }
-    i++;
+  int i;
+
+  if(name == NULL){
+      return CMD_NOT_FOUND;
   }
-  return -1;
+  
+  for(i = 0; i < NUM_OF_INSTRUCTIONS; i++){
+      if(strcmp(name,instructions[i].name)==0)
+          return instructions[i].opcode;
+  }
+  return CMD_NOT_FOUND;
 }
-int get_funct(char * name)
+
+/**
+ * Retrieves the funct code for a given instruction name.
+ * 
+ * @param name The name of the instruction.
+ * @return The funct field value if found, or -1 (CMD_NOT_FOUND) if invalid.
+ */
+int get_funct(char *name)
 {
-  int i = 0;
-  while(i < sizeof(instructions)/sizeof(instruction))
-  {
-    if(strcmp(name,instructions[i].name)==0)
-    {
-      return instructions[i].funct;
-    }
-    i++;
+  int i;
+  
+  if(name == NULL){
+      return CMD_NOT_FOUND;
   }
-  return -1;
+    
+  for(i = 0; i < NUM_OF_INSTRUCTIONS; i++){
+      if(strcmp(name,instructions[i].name)==0)
+          return instructions[i].funct;
+  }
+  return CMD_NOT_FOUND;
 }
+
+/**
+ * Checks if a string contains any non-whitespace characters (parameters).
+ *
+ * @param str The string to inspect.
+ * @return 1 if at least one non-whitespace character is found, 0 otherwise.
+ */
 int has_parameters(char *str){
-if(str == NULL)
-        return 0;
-while(*str != '\0'){
-     if(!isspace((unsigned char)*str))
-        return 1; 
-      str++;
+    if(str == NULL)
+         return 0;
+    while(*str != '\0'){
+        if(!isspace((unsigned char)*str))
+            return 1; 
+        str++;
+    }
+    return 0; 
 }
-return 0; 
+
+/**
+ * Checks whether a given string is a reserved language keyword
+ * (instruction name, directive, macro keyword, or register).
+ *
+ * @param name The string to check.
+ * @return 1 if reserved, 0 otherwise.
+ */
+ int is_reserved_keyword(char *name){
+    int reg_num = 0;
+    /* Check instruction names (add, sub, jmp, etc.) */
+    if(get_opcode(name) != CMD_NOT_FOUND)
+        return 1;
+
+    /* Check directive names */
+    if(strcmp(name, "db") == 0 || strcmp(name, "dh") == 0 || strcmp(name, "dw") == 0 || strcmp(name, "asciz") == 0 || strcmp(name, "entry") == 0 || strcmp(name, "extern") == 0)
+        return 1;
+
+    /* Check macro keywords */
+    if(strcmp(name, "mcro") == 0 || strcmp(name, "mcroend") == 0)
+        return 1;
+
+    /* Check register names ($0 to $31) */
+    if(name[0] == '$' && isdigit((unsigned char)name[1])){
+        reg_num = atoi(name + 1);
+        if(reg_num >= 0 && reg_num <= 31)
+            return 1;
+    }
+
+    return 0;
 }
-int is_valid_label(char *word, int line_number){
-    int length = strlen(word);
+/**
+ * Validates a label name according to language syntax rules:
+ * 1. Must not be NULL or empty.
+ * 2. Length must not exceed MAX_LABEL_LENGTH.
+ * 3. Must start with an alphabetic letter.
+ * 4. Must contain only alphanumeric characters.
+ * 5. Must not be a reserved keyword.
+ *
+ * @param name The label string to validate (without trailing colon).
+ * @param line_number Current line number for error reporting.
+ * @return 1 if valid, 0 otherwise.
+ */
+int is_valid_label(char *name, int line_number){
+
+    int length = strlen(name);
     int i;
-    if (length < 1 || (length - 1) > MAX_LABEL_LENGTH){
-        fprintf(stderr, "Error in line %d: The label name is too long\n", line_number);
+    
+    if(name == NULL || length == 0){
+        fprintf(stderr, "Error in line %d: Label name cannot be empty.\n", line_number);
         return 0;
-        }
-    if(!((word[0] >= 'a' && word[0] <= 'z') || (word[0] >= 'A' && word[0] <= 'Z'))){
-      fprintf(stderr, "Error in line %d: Label name does not start with a letter\n", line_number);
-      return 0;
-      }
-      for (i = 1; i < length - 1; i++){
-        if(!((word[i] >= 'a' && word[i] <= 'z') || (word[i] >= 'A' && word[i] <= 'Z') || (word[i] >= '0' && word[i] <= '9'))){
+    }
+    if(length > MAX_LABEL_LENGTH){
+        fprintf(stderr, "Error in line %d: The label name is too long.\n", line_number);
+        return 0;
+    }
+    /* First character must be a letter */
+    if(!isalpha((unsigned char)name[0])){
+        fprintf(stderr, "Error in line %d: The label name must start with an alphabetic letter.\n", line_number);
+        return 0;
+    }
+    /* All subsequent characters must be alphanumeric */
+    for(i = 1; i < length; i++){
+        if(!isalnum((unsigned char)name[i])){
             fprintf(stderr, "Error in line %d: Invalid label name\n", line_number);
              return 0;
-             }
-    } /*end for*/
-    word[length - 1] = '\0';
-    if(get_opcode(word) != -1){
-         fprintf(stderr, "Error in line %d: Label name cannot be a reserved instruction word\n", line_number);
-        word[length - 1] = ':';
-        return 0;
         }
+    } 
+    /* Label cannot be a reserved word */
+    if(is_reserved_keyword(name)){
+        fprintf(stderr, "Error in line %d: The label name is a reserved keyword.\n", line_number);
+        return 0;
+    }
     return 1;
 }
+
+/**
+ * Checks if a given command is a data allocation directive (.dh, .dw, .db, .asciz).
+ *
+ * @param command_name The name of the command to check.
+ * @return 1 if it is a data directive, 0 otherwise.
+ */
 int is_data_directive(char *command_name){
-  if(command_name[0] != '.')
-    return 0;
-  if((strcmp(command_name, ".dh") == 0) || (strcmp(command_name, ".dw") == 0) || (strcmp(command_name, ".db") == 0) || (strcmp(command_name, ".asciz") == 0))
+  if(command_name == NULL || command_name[0] != '.')
+        return 0;
+  if((strcmp(command_name, DIRECTIVE_DH_STR) == 0) || (strcmp(command_name, DIRECTIVE_DW_STR) == 0) || (strcmp(command_name, DIRECTIVE_DB_STR) == 0) || (strcmp(command_name, DIRECTIVE_ASCIZ_STR) == 0))
       return 1;
+      
   return 0;
 }
 
+/**
+ * Checks if a given line is empty (contains only whitespace) or is a comment line.
+ *
+ * @param line The string line to inspect.
+ * @return 1 if the line is empty or a comment, 0 otherwise.
+ */
 int is_empty_or_comment(char *line){
   int i = 0;
-  while(line[i] == '\t' || line[i] == ' '){
+  
+  /* Safe guard against NULL pointers */
+  if(line == NULL)
+      return 1;
+  
+  /* Skip leading whitespace characters (spaces, tabs) */
+  while(line[i] != '\0' && (line[i] == '\t' || line[i] == ' ')){
       i++;
   }
+  
+  /* Check if line is empty, ended, or begins with a comment symbol */
   if(line[i] == '\0' || line[i] == '\n' || line[i] == '\r' || line[i] == ';'){
     return 1;
   }
   return 0;
 }
+
+/**
+ * Inserts a 32-bit instruction word into the code image using Little-Endian order.
+ * Automatically expands the code_image memory buffer if needed.
+ *
+ * @param word The 32-bit encoded instruction word.
+ */
+ void insert_to_code_image(unsigned int word) {
+    int i;
+    BYTE *temp = NULL;
+    /* Reallocate code image buffer if capacity is reached */
+    while(IC + MEMORY_WORD_SIZE >= code_capacity){
+        code_capacity = (code_capacity == 0) ? INITIAL_CAPACITY : code_capacity * 2;
+        temp = (BYTE *) realloc(code_image, code_capacity * sizeof(BYTE));
+        if(temp == NULL){
+        fprintf(stderr, "Fatal Error: Memory allocation failed for code_capacity\n");
+        exit(1);
+        }
+    code_image = temp;
+    }
+    /* Store 32 bits as 4 bytes in Little-Endian byte order */
+    for(i = 0; i < MEMORY_WORD_SIZE; i++){
+        code_image[IC] = (word >> (i * 8)) & BYTE_MASK;
+        IC++;
+    }
+}
+
+/**
+ * Validates operands and encodes an R-type machine instruction into the code image.
+ *
+ * @param parameters String containing the register operands (e.g. "$3, $5, $9").
+ * @param opcode The opcode of the instruction (0 for arithmetic/logic, 1 for copy/move).
+ * @param funct The funct field value.
+ * @param line_number The line number in the source file for error messaging.
+ * @return 1 if valid and successfully encoded, 0 if errors were found.
+ */
 int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct, int line_number){
-char *reg;
-char copy[100];
-int reg_num = 0;
-unsigned int encoded = 0;
-int count = 0;
-int i;
-BYTE *temp;
-
-strcpy(copy, parameters);
-encoded = encoded | (opcode & 0x3F) << 26;
-encoded = encoded | (funct & 0x1F) << 6;
-reg = strtok(copy, ", \t\n");
-
-while(reg != NULL){
-    reg_num = check_register(reg, line_number) ;
-    if(reg_num == -1)
-      return 0;
-    if(opcode == 0){
+  char *reg = NULL;
+  char copy[MAX_LINE_LENGTH];
+  int reg_num = 0;
+  unsigned int encoded = 0;
+  int count = 0;
+  
+  /* Encode fixed opcode and funct fields */
+  encoded = encoded | (opcode & OPCODE_MASK) << OPCODE_SHIFT;
+  encoded = encoded | (funct & FUNCT_MASK) << FUNCT_SHIFT;
+  
+  strcpy(copy, parameters);
+  reg = strtok(copy, ", \t\n");
+  
+  /* Parse each register operand */
+  while(reg != NULL){
+      reg_num = check_register(reg, line_number) ;
+      if(reg_num == -1)
+          return 0;
+      if(opcode == OPCODE_R_MATH){
+      /* Arithmetic/logical operations: 3 registers (rs, rt, rd) */
       switch(count){
         case 0:
-            encoded  = encoded | (reg_num & 0x1F) << 21;
+            encoded  = encoded | (reg_num & REG_MASK) << RS_SHIFT;
             break;
         case 1:
-            encoded  = encoded | (reg_num & 0x1F) << 16;
+            encoded  = encoded | (reg_num & REG_MASK) << RT_SHIFT;
             break;
         case 2:
-            encoded  = encoded | (reg_num & 0x1F) << 11;
+            encoded  = encoded | (reg_num & REG_MASK) << RD_SHIFT;
             break;
       }
     }
     else{
+    /* Copy/move operations (move, mvhi, mvlo): 2 registers (rs, rd), rt is 0 */
       switch(count){
         case 0:
-            encoded  = encoded | (reg_num & 0x1F) << 21;
+            encoded  = encoded | (reg_num & REG_MASK) << RS_SHIFT;
             break;
         case 1:
-            encoded  = encoded | (reg_num & 0x1F) << 11;
+            encoded  = encoded | (reg_num & REG_MASK) << RD_SHIFT;
             break;
       }
     }    
     count++;
     reg = strtok(NULL, ", \t\n");
-}
-if((opcode == 0 && count != 3) || (opcode == 1 && count != 2)){
-  fprintf(stderr, "Error in line %d: Invalid number of registers\n", line_number);
-  return 0;
-}
-while(IC + 4 >= code_capacity){
-     code_capacity = (code_capacity == 0) ? 100 : code_capacity * 2;
-     temp = (BYTE *) realloc(code_image, code_capacity * sizeof(BYTE));
-     if(temp == NULL){
-     fprintf(stderr, "Fatal Error: Memory allocation failed for code_capacity\n");
-     exit(1);
-     }
-     code_image = temp;
-}
-for(i = 0; i < 4; i++){
-    code_image[IC] = (encoded >> (i * 8)) & 0xFF;
-    IC++;
-}
-return 1;
-}
-int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_number){
-
-char *reg;
-char *end;
-char copy[100];
-long immed;
-int reg_num = 0;
-int i;
-unsigned int encoded = 0;
-BYTE *temp;
-
-encoded = encoded | (opcode & 0x3F) << 26;
-strcpy(copy, parameters);
-reg = strtok(copy, ", \t\n");
-reg_num = check_register(reg, line_number);
-if(reg == NULL || reg_num == -1)
-    return 0;
-encoded  = encoded | (reg_num & 0x1F) << 21;
-if((opcode >= 10 && opcode <= 14) || (opcode >= 19 && opcode <=24)){
-    reg = strtok(NULL, ", \t\n");
-    if(reg == NULL){
-        fprintf(stderr, "Error in line %d: Missing immediate value\n", line_number);
-        return 0;
-    }
-    immed = strtol(reg, &end, 10);
-    if(*end != '\0' || end == reg){
-        fprintf(stderr, "Error in line %d: Invalid immediate\n", line_number);
-        return 0;
-    }
-    if(immed > 32767 || immed < -32768){
-       fprintf(stderr, "Error in line %d: Invalid immed\n", line_number);
-       return 0;
-    }
-    reg = strtok(NULL, ", \t\n");
-    reg_num = check_register(reg, line_number) ;
-    if(reg == NULL || reg_num == -1)
-      return 0;
-    encoded  = encoded | (reg_num & 0x1F) << 16;
-    encoded  = encoded | (immed & 0xFFFF);
-}
-else{
-  if(opcode >= 15 && opcode <= 18){
-     reg = strtok(NULL, ", \t\n");
-     reg_num = check_register(reg, line_number) ;
-     if(reg == NULL || reg_num == -1)
-         return 0;
-      encoded  = encoded | (reg_num & 0x1F) << 16;
-      reg = strtok(NULL, ", \t\n");
-      if(reg == NULL || is_valid_label(reg, line_number) == 0)
-         return 0;
   }
+  /* Validate total number of register operands */
+  if((opcode == OPCODE_R_MATH && count != R_ARITHMETIC_REG_COUNT) || (opcode == OPCODE_R_COPY && count != R_COPY_REG_COUNT)){
+      fprintf(stderr, "Error in line %d: Invalid number of registers\n", line_number);
+      return 0;
+  }
+  /* Write encoded instruction to memory */
+  insert_to_code_image(encoded);
+  
+  return 1;
 }
-reg = strtok(NULL, ", \t\n");
-if(reg != NULL){
-  fprintf(stderr, "Error in line %d: Superfluous parameters\n", line_number);
-  return 0;
-}
-while(IC + 4 >= code_capacity){
-     code_capacity = (code_capacity == 0) ? 100 : code_capacity * 2;
-     temp = (BYTE *) realloc(code_image, code_capacity * sizeof(BYTE));
-     if(temp == NULL){
-        fprintf(stderr, "Fatal Error: Memory allocation failed for code_capacity\n");
-        exit(1);
-     }
-     code_image = temp;
-}
-for(i = 0; i < 4; i++){
-    code_image[IC] = (encoded >> (i * 8)) & 0xFF;
-    IC++;
-}
-return 1;
-}
-int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_number){
-char *reg;
-char copy[100];
-int i;
-int reg_num;
-unsigned int encoded = 0;
-BYTE *temp;
 
-encoded = encoded | (opcode & 0x3F) << 26;
-strcpy(copy, parameters);
-reg = strtok(copy, ", \t\n");
-if(opcode != 63){
-if(has_parameters(parameters) == 0){
-  fprintf(stderr, "Error in line %d: Superfluous parameters\n", line_number);
-  return 0;
-}
-if(reg == NULL){
-  fprintf(stderr, "Error in line %d: Missing parameter for J instruction\n", line_number);
-  return 0;
-}  
-if(opcode == 31 || opcode == 32){
-  if(is_valid_label(reg, line_number) == 0)
-         return 0;
-}
-if(opcode == 30){
-    if(reg[0] == '$'){
-        reg_num = check_register(reg, line_number);
-        if(reg_num == -1)
+/**
+ * Validates operands and encodes an I-type machine instruction into the code image.
+ * Handles both immediate arithmetic/memory operations and conditional branch instructions.
+ *
+ * @param parameters String containing operands (e.g. "$1, -50, $2" or "$1, $2, LABEL").
+ * @param opcode The opcode of the I-type instruction.
+ * @param line_number Current line number in source file for error reporting.
+ * @return 1 if valid and successfully processed, 0 on syntax/operand error.
+ */
+int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_number){
+  char *token = NULL;
+  char *endptr = NULL;
+  char copy[MAX_LINE_LENGTH];
+  long immed = 0;
+  int reg_num = 0;
+  unsigned int encoded = 0;
+
+  /* Encode fixed opcode field */
+  encoded = encoded | (opcode & OPCODE_MASK) << OPCODE_SHIFT;
+  
+  strcpy(copy, parameters);
+  
+  /* 1. Parse first operand: source register (rs) */
+  token = strtok(copy, ", \t\n");
+  if(token == NULL){
+      fprintf(stderr, "Error in line %d: Missing first register operand\n", line_number);
+      return 0;
+  }
+  reg_num = check_register(token, line_number);
+  if(reg_num == -1)
+      return 0;
+  encoded  = encoded | (reg_num & REG_MASK) << RS_SHIFT;
+  if((opcode >= MIN_I_MATH_OPCODE && opcode <= MAX_I_MATH_OPCODE) || (opcode >= MIN_I_LOAD_STORE_OPCODE && opcode <= MAX_I_LOAD_STORE_OPCODE)){
+      /* 2. Parse second operand: 16-bit immediate value */
+      token = strtok(NULL, ", \t\n");
+      if(token == NULL){
+          fprintf(stderr, "Error in line %d: Missing immediate numeric value\n", line_number);
+          return 0;
+      }
+      immed = strtol(token, &endptr, 10);
+      if(*endptr != '\0' || endptr == token){
+          fprintf(stderr, "Error in line %d: Invalid immediate\n", line_number);
+          return 0;
+      }
+      if(immed > MAX_IMMED_VAL || immed < MIN_IMMED_VAL){
+          fprintf(stderr, "Error in line %d: Invalid immed\n", line_number);
+          return 0;
+      }
+    
+      /* 3. Parse third operand: target register (rt) */
+      token = strtok(NULL, ", \t\n");
+      if(token == NULL){
+          fprintf(stderr, "Error in line %d: Missing target register operand\n", line_number);
+          return 0;
+      }
+      reg_num = check_register(token, line_number) ;
+      if(reg_num == -1)
+          return 0;
+        
+      encoded  = encoded | (reg_num & REG_MASK) << RT_SHIFT;
+      encoded  = encoded | (immed & IMMED_16BIT_MASK);
+  }
+  else{
+    if(opcode >= MIN_I_BRANCH_OPCODE && opcode <= MAX_I_BRANCH_OPCODE){
+        /* Branch instructions (beq, bne, blt, bgt): format is (rs, rt, label) */
+
+        /* 2. Parse second operand: second register (rt) */
+        token = strtok(NULL, ", \t\n");
+        if(token == NULL){
+           fprintf(stderr, "Error in line %d: Missing second register operand for branch\n", line_number);
+           return 0;
+        }
+        reg_num = check_register(token, line_number);
+        if(reg_num == -1) 
             return 0;
-        encoded = encoded | (1U << 25);
-        encoded |= (reg_num & 0x1FFFFFF);
+        encoded = encoded | (reg_num & REG_MASK) << RT_SHIFT;
+        /* Parse third operand: label name (verified now, address resolved in second pass) */
+        token = strtok(NULL, ", \t\n");
+        if(token == NULL || !is_valid_label(token, line_number))
+            return 0;
+        /* Branch label address offset will be calculated and encoded in second pass */
+      }
+  }
+      /* 4. Check for extraneous parameters */
+      token = strtok(NULL, ", \t\n");
+      if(token != NULL){
+          fprintf(stderr, "Error in line %d: Extraneous text after instruction operands\n", line_number);
+          return 0;
+      }
+      /* Store encoded instruction word in code image */
+      insert_to_code_image(encoded);
+      
+      return 1;
+}
+
+/**
+ * Validates operands and encodes a J-type machine instruction into the code image.
+ * Handles jump/call instructions (jmp, la, call) and the stop instruction (hlt).
+ *
+ * @param parameters String containing the operand (register or label), or empty/NULL for hlt.
+ * @param opcode The opcode of the J-type instruction.
+ * @param line_number Current line number in source file for error reporting.
+ * @return 1 if valid and successfully processed, 0 on operand/syntax error.
+ */
+int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_number){
+  char *token = NULL;
+  char copy[MAX_LINE_LENGTH];
+  int reg_num;
+  unsigned int encoded = 0;
+
+  /* Encode fixed opcode field (bits 26-31) */
+  encoded = encoded | (opcode & OPCODE_MASK) << OPCODE_SHIFT;
+
+  strcpy(copy, parameters);
+  token = strtok(copy, ", \t\n");
+  /* 1. Handle 'hlt' instruction (expects no parameters) */
+  if(opcode != OPCODE_HLT){
+      if(has_parameters(parameters) == 0){
+          fprintf(stderr, "Error in line %d: Superfluous parameters\n", line_number);
+          return 0;
+  }
+  if(token == NULL){
+      fprintf(stderr, "Error in line %d: Missing parameter for J instruction\n", line_number);
+      return 0;
+  }  
+  /* 3. Validate 'la' and 'call' (only accept a label target) */
+  if(opcode == OPCODE_LA || opcode == OPCODE_CALL){
+      if(is_valid_label(token, line_number) == 0)
+          return 0;
+      /* Target label address will be resolved and filled during second pass */
+  }
+  /* 4. Validate 'jmp' (accepts either a register with $ or a label) */
+  if(opcode == OPCODE_JMP){
+      if(token[0] == '$'){
+          reg_num = check_register(token, line_number);
+          if(reg_num == -1)
+              return 0;
+          /*Turn on the reg bit (bit 25) and encode register number in address field */
+        encoded = encoded | (1U << J_REG_FLAG_SHIFT);
+        encoded  = encoded | (reg_num & J_ADDRESS_MASK);
     }
     else{
-        if(is_valid_label(reg, line_number) == 0)
-        return 0;
+        if(is_valid_label(token, line_number) == 0)
+            return 0;
+        /*Target label address will be resolved during second pass (bit 25 remains 0)*/
     }
+  }
+  /* 5. Check for extraneous parameters */
+  token = strtok(NULL, ", \t\n");
+  if(token != NULL){
+      fprintf(stderr, "Error in line %d: Extraneous text after instruction parameter\n", line_number);
+      return 0;
+  }
+ } 
+  /* Store encoded instruction word into code image */
+  insert_to_code_image(encoded);
+  
+  return 1;
 }
-reg = strtok(NULL, ", \t\n");
-} /*end if(opcode != 63)*/
-if(reg != NULL){
-  fprintf(stderr, "Error in line %d: Superfluous parameters\n", line_number);
-  return 0;
-}
-while(IC + 4 >= code_capacity){
-     code_capacity = (code_capacity == 0) ? 100 : code_capacity * 2;
-     temp = (BYTE *) realloc(code_image, code_capacity * sizeof(BYTE));
-     if(temp == NULL){
-        fprintf(stderr, "Fatal Error: Memory allocation failed for code_capacity\n");
-        exit(1);
-     }
-     code_image = temp;
-}
-for(i = 0; i < 4; i++){
-    code_image[IC] = (encoded >> (i * 8)) & 0xFF;
-    IC++;
-}
-return 1;
-}
+
+/**
+ * Validates a register operand string (must start with '$' followed by an integer 0-31).
+ *
+ * @param reg The register string (e.g. "$0", "$31").
+ * @param line_number Current line number in source file for error reporting.
+ * @return The integer register number (0 to 31) if valid, or -1 (INVALID_REGISTER) on error.
+ */
 int check_register(char *reg, int line_number){
-char *end;
-long num;
-if(reg[0] != '$'){
-  fprintf(stderr, "Error in line %d: Invalid Register name\n", line_number);
-  return -1;
+  char *end = NULL;
+  long num = 0;
+  if(reg == NULL || reg[0] != REGISTER_PREFIX){
+      fprintf(stderr, "Error in line %d: Invalid Register name\n", line_number);
+      return INVALID_REGISTER;
+  }
+  
+  num = strtol(reg + 1, &end, 10);
+  if(*end != '\0' || end == reg + 1){
+      fprintf(stderr, "Error in line %d: Invalid Register name\n", line_number);
+      return INVALID_REGISTER;
+  }
+  if(num < MIN_REGISTER_NUM || num > MAX_REGISTER_NUM){
+    fprintf(stderr, "Error in line %d: Invalid Register name\n", line_number);
+    return INVALID_REGISTER;;
+  }
+  return (int)num; 
 }
-num = strtol(reg + 1, &end, 10);
-if(*end != '\0' || end == reg + 1){
-  fprintf(stderr, "Error in line %d: Invalid Register name\n", line_number);
-  return -1;
-}
-if(num<0 || num >31){
-  fprintf(stderr, "Error in line %d: Invalid Register name\n", line_number);
-  return -1;
-}
-return (int)num; 
-}
+
+/**
+ * Validates the operand syntax of an .asciz directive.
+ * Ensures the string is enclosed in double quotes and has no trailing non-whitespace characters.
+ *
+ * @param parameters The operand string to validate (e.g. " \"Hello World\" ").
+ * @param line_number Current line number in source file for error reporting.
+ * @return 1 if valid string syntax, 0 otherwise.
+ */
 int check_asciz_parameter(char *parameters, int line_number){
-int i = 0;
-while(parameters[i] == '\t' || parameters[i] == ' '){
+  int i = 0;
+  
+  /* 1. Skip leading whitespace */
+  while(parameters[i] == '\t' || parameters[i] == ' '){
       i++;
-}
-if(parameters[i] == '"')
-  i++;
-else{
-  fprintf(stderr, "Error in line %d: Invalid string\n", line_number);
-  return 0;
-}
-while(parameters[i] != '"' && parameters[i] != '\0' && parameters[i] != '\n'){
+  }
+  /* 2. Verify opening quote */
+  if(parameters[i] == STRING_QUOTE)
       i++;
-}
-if(parameters[i] != '"'){
-  fprintf(stderr, "Error in line %d: Invalid string\n", line_number);
-  return 0;
-}
-i++;
-while(parameters[i] != '\0' && parameters[i] != '\n'){
+  else{
+      fprintf(stderr, "Error in line %d: Invalid string\n", line_number);
+      return 0;
+  }
+  
+  /* 3. Scan characters until closing quote or line end */
+  while(parameters[i] != STRING_QUOTE && parameters[i] != '\0' && parameters[i] != '\n'){
+      i++;
+  }
+  
+  /* 4. Verify closing quote was reached */
+  if(parameters[i] != STRING_QUOTE){
+      fprintf(stderr, "Error in line %d: Invalid string\n", line_number);
+      return 0;
+  }
+  i++; /* Move past the closing quote */
+  
+  /* 5. Ensure no extraneous characters remain after closing quote */
+  while(parameters[i] != '\0' && parameters[i] != '\n'){
       if(parameters[i] != '\t' && parameters[i] != '\r' && parameters[i] != ' '){
           fprintf(stderr, "Error in line %d: Invalid string\n", line_number);
           return 0;
       }
       i++;
-}
-return 1;
+  } 
+  return 1;
 }  
-const char* skip_spaces(const char *ptr){
-    if (ptr == NULL){
+
+/**
+ * Advances the pointer past any leading whitespace characters.
+ *
+ * @param ptr Pointer to the start of a string.
+ * @return Pointer to the first non-whitespace character, or NULL if ptr is NULL.
+ */
+char* skip_spaces(char *ptr){
+    if(ptr == NULL)
         return NULL;
-    }
+
     while (*ptr != '\0' && isspace((unsigned char)*ptr)){
         ptr++;
     }
     return ptr;
 }
 
-int check_directive_parameter(const char *line, DirectiveType type, int line_number) {
-    const char *ptr;
-    char *endptr;
-    long value; /* שימוש ב-long התואם לתקן C90 */
-    int expecting_number;
+/**
+ * Validates the comma-separated numeric parameters of a data directive (.db, .dh, .dw).
+ * Checks for syntax errors (consecutive, leading, or trailing commas) and verifies
+ * that values fit within their respective bit-width signed limits.
+ *
+ * @param line The string containing comma-separated numeric arguments.
+ * @param type The type of data directive (DIRECTIVE_DB, DIRECTIVE_DH, DIRECTIVE_DW).
+ * @param line_number Current line number in source file for error reporting.
+ * @return 1 if all arguments are valid, 0 on syntax or range error.
+ */
+int check_directive_parameter(char *line, DirectiveType type, int line_number){
+  char *ptr;
+  char *endptr = NULL;
+  long value = 0; 
+  int expecting_number = 1;
 
-    if (line == NULL) {
-        fprintf(stderr, "Error in line %d: Null pointer provided.\n", line_number);
-        return 0;
-    }
-
-    ptr = skip_spaces(line);
-    expecting_number = 1;
-
-    /* בדיקה האם יש ארגומנטים בשורה */
-    if (*ptr == '\0') {
-        fprintf(stderr, "Error in line %d: Missing arguments for data directive.\n", line_number);
-        return 0;
-    }
-
-    /* איסור פסיק מוביל לפני המספר הראשון */
-    if (*ptr == ',') {
-        fprintf(stderr, "Error in line %d: Illegal leading comma before the first number.\n", line_number);
-        return 0;
-    }
-
-    while (*ptr != '\0') {
-        if (expecting_number) {
-            errno = 0;
-            /* שימוש בפונקציה התקנית strtol */
-            value = strtol(ptr, &endptr, 10);
-
-            /* אם לא נקרא מספר */
-            if (ptr == endptr) {
-                fprintf(stderr, "Error in line %d: Expected an integer but found '%c'.\n", line_number, *ptr);
-                return 0;
-            }
-
-            /* בדיקת טווחי ייצוג (Two's Complement) */
-            if (type == DIRECTIVE_DB) {
-                if (value < MIN_DB || value > MAX_DB) {
-                    fprintf(stderr, "Error in line %d: Value %ld exceeds 8-bit range [%d, %d] for .db.\n",
-                            line_number, value, MIN_DB, MAX_DB);
+  if(line == NULL){
+     fprintf(stderr, "Error in line %d: Null pointer provided.\n", line_number);
+      return 0;
+  }
+  ptr = skip_spaces(line);
+  
+  /* Check for empty argument list */
+  if(*ptr == '\0'){
+      fprintf(stderr, "Error in line %d: Missing arguments for data directive.\n", line_number);
+      return 0;
+  }
+  
+  /* Check for illegal leading comma */
+  if(*ptr == ','){
+      fprintf(stderr, "Error in line %d: Illegal leading comma before the first number.\n", line_number);
+      return 0;
+  }
+  while(*ptr != '\0'){
+      if(expecting_number){
+          errno = 0;
+          value = strtol(ptr, &endptr, 10);
+          
+          /* Check if no digits could be parsed */
+          if(ptr == endptr){
+              fprintf(stderr, "Error in line %d: Expected an integer but found '%c'.\n", line_number, *ptr);
+              return 0;
+          }
+          
+          /* Validate numeric boundaries based on directive bit-width */
+          if(type == DIRECTIVE_DB){
+              if(value < MIN_DB || value > MAX_DB){
+                  fprintf(stderr, "Error in line %d: Value %ld exceeds 8-bit range [%d, %d] for .db.\n", line_number, value, MIN_DB, MAX_DB);
+                  return 0;
+              }
+          } 
+          else if(type == DIRECTIVE_DH){
+                  if(value < MIN_DH || value > MAX_DH){
+                     fprintf(stderr, "Error in line %d: Value %ld exceeds 16-bit range [%d, %d] for .dh.\n", line_number, value, MIN_DH, MAX_DH);
                     return 0;
-                }
-            } else if (type == DIRECTIVE_DH) {
-                if (value < MIN_DH || value > MAX_DH) {
-                    fprintf(stderr, "Error in line %d: Value %ld exceeds 16-bit range [%d, %d] for .dh.\n",
-                            line_number, value, MIN_DH, MAX_DH);
-                    return 0;
-                }
-            } else if (type == DIRECTIVE_DW) {
-                if (value < MIN_DW || value > MAX_DW || errno == ERANGE) {
-                    fprintf(stderr, "Error in line %d: Value %ld exceeds 32-bit range for .dw.\n",
-                            line_number, value);
-                    return 0;
-                }
-            }
-
-            ptr = skip_spaces(endptr);
-            expecting_number = 0;
-        } else {
-            /* בדיקת פסיק מפריד */
-            if (*ptr == ',') {
-                ptr++;
-                ptr = skip_spaces(ptr);
-
-                if (*ptr == ',') {
-                    fprintf(stderr, "Error in line %d: Multiple consecutive commas.\n", line_number);
-                    return 0;
-                }
-                if (*ptr == '\0') {
-                    fprintf(stderr, "Error in line %d: Illegal trailing comma at end of line.\n", line_number);
-                    return 0;
-                }
-
-                expecting_number = 1;
-            } else {
-                fprintf(stderr, "Error in line %d: Missing comma between numbers or invalid character '%c'.\n",
-                        line_number, *ptr);
-                return 0;
+                 }
+          } 
+          else if(type == DIRECTIVE_DW){
+                 if(value < MIN_DW || value > MAX_DW || errno == ERANGE){
+                     fprintf(stderr, "Error in line %d: Value %ld exceeds 32-bit range for .dw.\n", line_number, value);
+                     return 0;
+                 }
+          }
+          ptr = skip_spaces(endptr);
+          expecting_number = 0;
+        }
+        else{
+            /* Expecting a separating comma */
+            if(*ptr == ','){
+              ptr++;
+              ptr = skip_spaces(ptr);
+              if(*ptr == ','){
+                 fprintf(stderr, "Error in line %d: Multiple consecutive commas.\n", line_number);
+                  return 0;
+              }
+              if (*ptr == '\0') {
+                  fprintf(stderr, "Error in line %d: Illegal trailing comma at end of line.\n", line_number);
+                  return 0;
+              }
+              expecting_number = 1;
+            } 
+            else{
+              fprintf(stderr, "Error in line %d: Missing comma between numbers or invalid character '%c'.\n", line_number, *ptr);
+              return 0;
             }
         }
     }
 
     return 1;
 }
+
+/**
+ * Parses numeric parameters and encodes them into the data image array
+ * using Little-Endian byte order. Supports 1, 2, or 4 byte values (.db, .dh, .dw).
+ *
+ * @param parameters String containing comma-separated numbers.
+ * @param size Number of bytes allocated per number (1 for .db, 2 for .dh, 4 for .dw).
+ */
 void enter_to_data_image(char *parameters, int size){
-char *p = (char *)parameters;
-char *end;
-long num;
-long part;
-BYTE *temp;
-while(*p != '\0'){
+  char *p = parameters;
+  char *end = NULL;
+  long num = 0;
+  int i;
+  BYTE *temp = NULL;
+  
+  while(*p != '\0'){
+      /* Skip whitespace and commas between numbers */
       while(*p != '\0' && (isspace((unsigned char)*p) || *p == ',')){
           p++;
       }
+      
       if(*p == '\0') 
           break;
+          
       num = strtol(p, &end, 10);
       if(p == end)
           break;
+      
+      /* Ensure sufficient capacity in data_image buffer */
       while(DC + size >= data_capacity){
-          data_capacity = (data_capacity == 0) ? 100 : data_capacity * 2;
+          data_capacity = (data_capacity == 0) ? INITIAL_CAPACITY : data_capacity * 2;
           temp = (BYTE *) realloc(data_image, data_capacity * sizeof(BYTE));
           if(temp == NULL){
             fprintf(stderr, "Fatal Error: Memory allocation failed for data_image\n");
@@ -475,54 +685,54 @@ while(*p != '\0'){
           }
           data_image = temp;
       }
-      switch(size){
-          case 1:
-                data_image[DC] = (BYTE) num;
-                DC++;
-                break;
-          case 2:
-                part = num & 0xFF;
-                data_image[DC] = (BYTE) part;
-                part = (num >> 8) & 0xFF;
-                data_image[DC + 1] = (BYTE) part;
-                DC += 2;
-                break;
-           case 4:
-                part = num & 0xFF;
-                data_image[DC] = (BYTE) part;
-                part = (num >> 8) & 0xFF;
-                data_image[DC + 1] = (BYTE) part;
-                part = (num >> 16) & 0xFF;
-                data_image[DC + 2] = (BYTE) part;
-                part = (num >> 24) & 0xFF;
-                data_image[DC + 3] = (BYTE) part;
-                DC += 4;
-                break;
+      /* Store the number into data_image in Little-Endian format */
+      for(i = 0; i < size; i++){
+          data_image[DC] = (BYTE)((num >> (i * BITS_IN_BYTE)) & BYTE_MASK);
+          DC++;
       }
+        
       p = end;
     } 
 }
+
+/**
+ * Parses a string from an .asciz directive and stores each character 
+ * (plus a terminating null byte) sequentially into the data image.
+ *
+ * @param parameters String containing the quoted text argument (e.g. " \"abc\" ").
+ */
 void enter_asciz_to_data_image(char *parameters){
-int i = 0;
-BYTE *temp;
-while(DC + strlen(parameters) + 1 >= data_capacity){
-      data_capacity = (data_capacity == 0) ? 100 : data_capacity * 2;
+
+  int i = 0;
+  BYTE *temp = NULL;
+  
+  /* Ensure sufficient memory capacity in data_image */
+  while(DC + strlen(parameters) + 1 >= data_capacity){
+      data_capacity = (data_capacity == 0) ? INITIAL_CAPACITY : data_capacity * 2;
       temp = (BYTE *) realloc(data_image, data_capacity * sizeof(BYTE));
       if(temp == NULL){
          fprintf(stderr, "Fatal Error: Memory allocation failed for data_image\n");
          exit(1);
       }
       data_image = temp;
-}
-while(parameters[i] == '\t' || parameters[i] == ' ')
+  }
+  
+  /* Skip leading whitespace */
+  while(parameters[i] == '\t' || parameters[i] == ' ')
       i++;
-if(parameters[i] == '"')
-    i++;
-while(parameters[i] != '\0' && parameters[i] != '"'){
+      
+  /* Skip the opening quote */
+  if(parameters[i] == STRING_QUOTE)
+     i++;
+     
+  /* Copy characters into data image until closing quote or string end */
+  while(parameters[i] != '\0' && parameters[i] != STRING_QUOTE){
     data_image[DC] = (BYTE) parameters[i];
     DC++;
     i++;
-}
-data_image[DC] = (BYTE) 0;
-DC++;
+  }
+  
+  /* Append null terminator '\0' */
+  data_image[DC] = (BYTE) 0;
+  DC++;
 } 
