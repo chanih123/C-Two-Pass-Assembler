@@ -1,3 +1,11 @@
+/**
+ * @file utils.c
+ * @brief Utility functions for the assembler.
+ *
+ * This file provides helper functions for instruction parsing, string 
+ * manipulation, syntax validation, memory image encoding, and output generation.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -6,6 +14,7 @@
 #include "utils.h"
 #include "global.h"
 #include "first_pass.h"
+#include "symbol_table.h"
 
 /**
  * Fixed lookup table containing all 27 supported machine instructions,
@@ -41,8 +50,11 @@ instruction instructions[] = {
     {"hlt", J, 0, 63}
 };
 
+/* Global pointer for the external references linked list */
+static ExtNode *ext_head = NULL;
+
 /**
- * Looks up an instruction name in the instructions table.
+ * @brief Looks up an instruction name in the instructions table.
  * 
  * @param name The name of the command to search for.
  * @return The opcode of the instruction if found, or -1 (CMD_NOT_FOUND) otherwise.
@@ -63,7 +75,7 @@ int get_opcode(char *name)
 }
 
 /**
- * Retrieves the funct code for a given instruction name.
+ * @brief Retrieves the funct code for a given instruction name.
  * 
  * @param name The name of the instruction.
  * @return The funct field value if found, or -1 (CMD_NOT_FOUND) if invalid.
@@ -84,7 +96,7 @@ int get_funct(char *name)
 }
 
 /**
- * Checks if a string contains any non-whitespace characters (parameters).
+ * @brief Checks if a string contains any non-whitespace characters (parameters).
  *
  * @param str The string to inspect.
  * @return 1 if at least one non-whitespace character is found, 0 otherwise.
@@ -101,7 +113,7 @@ int has_parameters(char *str){
 }
 
 /**
- * Checks whether a given string is a reserved language keyword
+ * @brief Checks whether a given string is a reserved language keyword
  * (instruction name, directive, macro keyword, or register).
  *
  * @param name The string to check.
@@ -130,8 +142,9 @@ int has_parameters(char *str){
 
     return 0;
 }
+
 /**
- * Validates a label name according to language syntax rules:
+ * @brief Validates a label name according to language syntax rules:
  * 1. Must not be NULL or empty.
  * 2. Length must not exceed MAX_LABEL_LENGTH.
  * 3. Must start with an alphabetic letter.
@@ -176,7 +189,7 @@ int is_valid_label(char *name, int line_number){
 }
 
 /**
- * Checks if a given command is a data allocation directive (.dh, .dw, .db, .asciz).
+ * @brief Checks if a given command is a data allocation directive (.dh, .dw, .db, .asciz).
  *
  * @param command_name The name of the command to check.
  * @return 1 if it is a data directive, 0 otherwise.
@@ -191,7 +204,7 @@ int is_data_directive(char *command_name){
 }
 
 /**
- * Checks if a given line is empty (contains only whitespace) or is a comment line.
+ * @brief Checks if a given line is empty (contains only whitespace) or is a comment line.
  *
  * @param line The string line to inspect.
  * @return 1 if the line is empty or a comment, 0 otherwise.
@@ -216,7 +229,8 @@ int is_empty_or_comment(char *line){
 }
 
 /**
- * Inserts a 32-bit instruction word into the code image using Little-Endian order.
+ * @brief Inserts a 32-bit instruction word into the code image using Little-Endian order.
+ * 
  * Automatically expands the code_image memory buffer if needed.
  *
  * @param word The 32-bit encoded instruction word.
@@ -242,7 +256,7 @@ int is_empty_or_comment(char *line){
 }
 
 /**
- * Validates operands and encodes an R-type machine instruction into the code image.
+ * @brief Validates operands and encodes an R-type machine instruction into the code image.
  *
  * @param parameters String containing the register operands (e.g. "$3, $5, $9").
  * @param opcode The opcode of the instruction (0 for arithmetic/logic, 1 for copy/move).
@@ -293,7 +307,7 @@ int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct
             encoded  = encoded | (reg_num & REG_MASK) << RD_SHIFT;
             break;
       }
-    }    
+    }   
     count++;
     reg = strtok(NULL, ", \t\n");
   }
@@ -309,7 +323,8 @@ int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct
 }
 
 /**
- * Validates operands and encodes an I-type machine instruction into the code image.
+ * @brief Validates operands and encodes an I-type machine instruction into the code image.
+ * 
  * Handles both immediate arithmetic/memory operations and conditional branch instructions.
  *
  * @param parameters String containing operands (e.g. "$1, -50, $2" or "$1, $2, LABEL").
@@ -404,7 +419,8 @@ int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_
 }
 
 /**
- * Validates operands and encodes a J-type machine instruction into the code image.
+ * @brief Validates operands and encodes a J-type machine instruction into the code image.
+ * 
  * Handles jump/call instructions (jmp, la, call) and the stop instruction (hlt).
  *
  * @param parameters String containing the operand (register or label), or empty/NULL for hlt.
@@ -469,7 +485,7 @@ int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_
 }
 
 /**
- * Validates a register operand string (must start with '$' followed by an integer 0-31).
+ * @brief Validates a register operand string (must start with '$' followed by an integer 0-31).
  *
  * @param reg The register string (e.g. "$0", "$31").
  * @param line_number Current line number in source file for error reporting.
@@ -496,7 +512,8 @@ int check_register(char *reg, int line_number){
 }
 
 /**
- * Validates the operand syntax of an .asciz directive.
+ * @brief Validates the operand syntax of an .asciz directive.
+ * 
  * Ensures the string is enclosed in double quotes and has no trailing non-whitespace characters.
  *
  * @param parameters The operand string to validate (e.g. " \"Hello World\" ").
@@ -542,7 +559,7 @@ int check_asciz_parameter(char *parameters, int line_number){
 }  
 
 /**
- * Advances the pointer past any leading whitespace characters.
+ * @brief Advances the pointer past any leading whitespace characters.
  *
  * @param ptr Pointer to the start of a string.
  * @return Pointer to the first non-whitespace character, or NULL if ptr is NULL.
@@ -558,7 +575,8 @@ char* skip_spaces(char *ptr){
 }
 
 /**
- * Validates the comma-separated numeric parameters of a data directive (.db, .dh, .dw).
+ * @brief Validates the comma-separated numeric parameters of a data directive (.db, .dh, .dw).
+ * 
  * Checks for syntax errors (consecutive, leading, or trailing commas) and verifies
  * that values fit within their respective bit-width signed limits.
  *
@@ -612,7 +630,7 @@ int check_directive_parameter(char *line, DirectiveType type, int line_number){
                   if(value < MIN_DH || value > MAX_DH){
                      fprintf(stderr, "Error in line %d: Value %ld exceeds 16-bit range [%d, %d] for .dh.\n", line_number, value, MIN_DH, MAX_DH);
                     return 0;
-                 }
+                  }
           } 
           else if(type == DIRECTIVE_DW){
                  if(value < MIN_DW || value > MAX_DW || errno == ERANGE){
@@ -649,7 +667,7 @@ int check_directive_parameter(char *line, DirectiveType type, int line_number){
 }
 
 /**
- * Parses numeric parameters and encodes them into the data image array
+ * @brief Parses numeric parameters and encodes them into the data image array
  * using Little-Endian byte order. Supports 1, 2, or 4 byte values (.db, .dh, .dw).
  *
  * @param parameters String containing comma-separated numbers.
@@ -696,7 +714,7 @@ void enter_to_data_image(char *parameters, int size){
 }
 
 /**
- * Parses a string from an .asciz directive and stores each character 
+ * @brief Parses a string from an .asciz directive and stores each character 
  * (plus a terminating null byte) sequentially into the data image.
  *
  * @param parameters String containing the quoted text argument (e.g. " \"abc\" ").
@@ -736,3 +754,239 @@ void enter_asciz_to_data_image(char *parameters){
   data_image[DC] = (BYTE) 0;
   DC++;
 } 
+
+/**
+ * @brief Adds a new external symbol reference to the tracking list.
+ *
+ * @param name The name of the external symbol.
+ * @param address The IC address where the symbol was referenced.
+ */
+static void add_ext_reference(char *name, int address) {
+    ExtNode *new_node = (ExtNode *)malloc(sizeof(ExtNode));
+    ExtNode *curr;
+    if (new_node == NULL) {
+        fprintf(stderr, "Fatal Error: Memory allocation failed for external reference.\n");
+        exit(1);
+    }
+    strcpy(new_node->name, name);
+    new_node->address = address;
+    new_node->next = NULL;
+
+    if (ext_head == NULL) {
+        ext_head = new_node;
+    } else {
+        curr = ext_head;
+        while (curr->next != NULL) {
+            curr = curr->next;
+        }
+        curr->next = new_node;
+    }
+}
+
+/**
+ * @brief Frees the memory allocated for the external references list.
+ */
+void free_ext_references(void) {
+    ExtNode *curr = ext_head;
+    ExtNode *next;
+    while (curr != NULL) {
+        next = curr->next;
+        free(curr);
+        curr = next;
+    }
+    ext_head = NULL;
+}
+
+/**
+ * @brief Completes the encoding of an I-type branch instruction.
+ * 
+ * Calculates the relative distance to the target label and encodes 
+ * it into the lower 16 bits of the instruction[cite: 1].
+ *
+ * @param parameters The instruction parameters string.
+ * @param ic The address of the instruction.
+ * @param line_number The line number for error reporting.
+ * @return 1 on success, 0 on error.
+ */
+int complete_I_branch_instruction(char *parameters, int ic, int line_number) {
+    char copy[MAX_LINE_LENGTH];
+    char *token;
+    int index;
+    long distance;
+    Symbol *sym;
+
+    strcpy(copy, parameters);
+    
+    /* Skip the first two register operands */
+    token = strtok(copy, ", \t\n"); 
+    token = strtok(NULL, ", \t\n"); 
+    
+    /* Extract the target label */
+    token = strtok(NULL, ", \t\n"); 
+    if (token == NULL) {
+        return 0; /* Should have been caught in pass 1 */
+    }
+
+    index = find_symbol_index(token);
+    if (index == -1) {
+        fprintf(stderr, "Error in line %d: Label '%s' is not defined.\n", line_number, token);
+        return 0;
+    }
+
+    sym = get_symbol_by_index(index);
+    if (sym->type == external) {
+        fprintf(stderr, "Error in line %d: Branch target '%s' cannot be an external symbol.\n", line_number, token);
+        return 0;
+    }
+
+    /* Calculate distance: (target address) - (current instruction address) */
+    distance = sym->value - ic;
+    if (distance < MIN_IMMED_VAL || distance > MAX_IMMED_VAL) {
+        fprintf(stderr, "Error in line %d: Branch distance out of 16-bit range.\n", line_number);
+        return 0;
+    }
+
+    /* Encode the 16-bit distance into bytes 0 and 1 (Little-Endian) */
+    code_image[ic] |= (BYTE)(distance & BYTE_MASK);
+    code_image[ic + 1] |= (BYTE)((distance >> BITS_IN_BYTE) & BYTE_MASK);
+
+    return 1;
+}
+
+/**
+ * @brief Completes the encoding of a J-type instruction.
+ * 
+ * Resolves the address of the target label and encodes it into the 
+ * lower 25 bits. Tracks external references if used.
+ *
+ * @param parameters The instruction parameters string.
+ * @param ic The address of the instruction.
+ * @param line_number The line number for error reporting.
+ * @return 1 on success, 0 on error.
+ */
+int complete_J_instruction(char *parameters, int ic, int line_number) {
+    char copy[MAX_LINE_LENGTH];
+    char *token;
+    int index;
+    unsigned long addr;
+    Symbol *sym;
+
+    strcpy(copy, parameters);
+    token = strtok(copy, ", \t\n");
+
+    /* If no token, it's a 'hlt' instruction which requires no address */
+    if (token == NULL) {
+        return 1; 
+    }
+
+    /* If the target is a register (for jmp), it was fully encoded in Pass 1 */
+    if (token[0] == REGISTER_PREFIX) {
+        return 1; 
+    }
+
+    index = find_symbol_index(token);
+    if (index == -1) {
+        fprintf(stderr, "Error in line %d: Label '%s' is not defined.\n", line_number, token);
+        return 0;
+    }
+
+    sym = get_symbol_by_index(index);
+
+    /* If the symbol is external, track it and leave the address field as 0 */
+    if (sym->type == external) {
+        add_ext_reference(sym->name, ic);
+        return 1;
+    }
+
+    /* Encode the 25-bit address into bytes 0 to 3 (Little-Endian) */
+    addr = sym->value & J_ADDRESS_MASK;
+    code_image[ic] |= (BYTE)(addr & BYTE_MASK);
+    code_image[ic + 1] |= (BYTE)((addr >> BITS_IN_BYTE) & BYTE_MASK);
+    code_image[ic + 2] |= (BYTE)((addr >> (2 * BITS_IN_BYTE)) & BYTE_MASK);
+    code_image[ic + 3] |= (BYTE)((addr >> (3 * BITS_IN_BYTE)) & BYTE_MASK);
+
+    return 1;
+}
+
+/**
+ * @brief Generates the final object, entry, and external output files.
+ *
+ * @param ob_filename Name of the output object file.
+ * @param ext_filename Name of the output external file.
+ * @param ent_filename Name of the output entry file.
+ * @param icf Final instruction counter value.
+ * @param dcf Final data counter value.
+ * @return 1 on success, 0 on error.
+ */
+int write_output_files(char *ob_filename, char *ext_filename, char *ent_filename, int icf, int dcf) {
+    FILE *ob_file = NULL;
+    FILE *ext_file = NULL;
+    FILE *ent_file = NULL;
+    int i, j;
+    int has_entry = 0;
+    int data_addr;
+    int data_idx;
+    Symbol *sym;
+    ExtNode *ext_curr;
+
+    /* 1. Create .ob file */
+    ob_file = fopen(ob_filename, "w");
+    if (ob_file == NULL) {
+        return 0;
+    }
+    
+    fprintf(ob_file, "\t%d %d\n", icf - IC_INIT_VALUE, dcf);
+
+    /* Write Instruction Image (4 bytes per line) */
+    for (i = IC_INIT_VALUE; i < icf; i += MEMORY_WORD_SIZE) {
+        fprintf(ob_file, "%04d %02X %02X %02X %02X\n", i, 
+                code_image[i], code_image[i+1], code_image[i+2], code_image[i+3]);
+    }
+
+    /* Write Data Image (4 bytes per line) */
+    data_addr = icf;
+    data_idx = 0;
+    while (data_idx < dcf) {
+        fprintf(ob_file, "%04d", data_addr);
+        for (j = 0; j < MEMORY_WORD_SIZE && data_idx < dcf; j++) {
+            fprintf(ob_file, " %02X", data_image[data_idx]);
+            data_idx++;
+            data_addr++;
+        }
+        fprintf(ob_file, "\n");
+    }
+    fclose(ob_file);
+
+    /* 2. Create .ent file (Only if entries exist) */
+    for (i = 0; i < get_symbol_count(); i++) {
+        sym = get_symbol_by_index(i);
+        if (sym->is_entry) {
+            if (has_entry == 0) {
+                ent_file = fopen(ent_filename, "w");
+                if (ent_file == NULL) return 0;
+                has_entry = 1;
+            }
+            fprintf(ent_file, "%s %04d\n", sym->name, sym->value);
+        }
+    }
+    if (has_entry == 1) {
+        fclose(ent_file);
+    }
+
+    /* 3. Create .ext file (Only if external references exist) */
+    if (ext_head != NULL) {
+        ext_file = fopen(ext_filename, "w");
+        if (ext_file == NULL) return 0;
+        
+        ext_curr = ext_head;
+        while (ext_curr != NULL) {
+            fprintf(ext_file, "%s %04d\n", ext_curr->name, ext_curr->address);
+            ext_curr = ext_curr->next;
+        }
+        fclose(ext_file);
+    }
+
+    /* Clean up external references list for the next file */
+    free_ext_references();
+    return 1;
+}

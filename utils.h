@@ -1,17 +1,24 @@
+/**
+ * @file utils.h
+ * @brief Header file containing definitions, macros, and utility function declarations.
+ */
+
 #ifndef UTILS_H
 #define UTILS_H
+
 #include <stddef.h>
 #include "global.h"
 
-/** Return status when a command name is not found in the instruction table. */
+/** @brief Return status when a command name is not found in the instruction table. */
 #define CMD_NOT_FOUND -1
 
-/** Total number of supported machine instructions (R, I, J types). */
+/** @brief Total number of supported machine instructions (R, I, J types). */
 #define NUM_OF_INSTRUCTIONS 27
 
+/** @brief Memory size of a single instruction word in bytes. */
 #define MEMORY_WORD_SIZE 4
 
-/** Maximum string length of an instruction mnemonic name (e.g., "addi", "call"). */
+/** @brief Maximum string length of an instruction mnemonic name (e.g., "addi", "call"). */
 #define MAX_INSTRUCTION_NAME_LENGTH 5
 
 /* Directive name constants */
@@ -78,19 +85,33 @@
 
 #define BITS_IN_BYTE 8
 
-/** Instruction classification category (R, I, or J). */
+/** @brief Instruction classification category (R, I, or J). */
 typedef enum {R,I,J} type;
 
 /**
- * Metadata representation of a supported machine instruction.
+ * @brief Metadata representation of a supported machine instruction.
  */
 typedef struct{
-  char name[MAX_INSTRUCTION_NAME_LENGTH +1];
-  type op_type;
-  int funct;
-  int opcode;
+  char name[MAX_INSTRUCTION_NAME_LENGTH +1]; /**< Instruction mnemonic */
+  type op_type;                              /**< Instruction format type */
+  int funct;                                 /**< Funct field (if applicable) */
+  int opcode;                                /**< Primary opcode value */
 } instruction;
+
 extern instruction instructions [];
+
+/* External Reference Node Structure */
+/**
+ * @brief Node for a linked list tracking external symbol references.
+ * 
+ * Used to collect all addresses where an external symbol is used 
+ * so they can be written to the .ext file.
+ */
+typedef struct ExtNode {
+    char name[MAX_LABEL_LENGTH];
+    int address;
+    struct ExtNode *next;
+} ExtNode;
 
 /* Utils Interface Functions */
 
@@ -112,4 +133,10 @@ int check_directive_parameter(char *line, DirectiveType type, int line_number);
 void enter_to_data_image(char *parameters, int size);
 void enter_asciz_to_data_image(char *parameters);
 
-#endif
+/* Second Pass Completion Functions */
+int complete_I_branch_instruction(char *parameters, int ic, int line_number);
+int complete_J_instruction(char *parameters, int ic, int line_number);
+int write_output_files(char *ob_filename, char *ext_filename, char *ent_filename, int icf, int dcf);
+void free_ext_references(void);
+
+#endif /* UTILS_H */
