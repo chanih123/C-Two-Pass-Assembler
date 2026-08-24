@@ -1,7 +1,0 @@
-.
-la    val1
-jmp   NEXT
-.
-la    val1
-jmp   NEXT
-.
