@@ -122,6 +122,8 @@ int is_reserved_keyword(char *name);
 int is_valid_label(char *word, int line_number);
 int is_data_directive(char *command_name);
 int is_empty_or_comment(char *line);
+char *extract_token(char *src, char *dest, int max_len);
+char *match_comma(char *p, int line_number);
 int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct, int line_number);
 void insert_to_code_image(unsigned int word);
 int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_number);

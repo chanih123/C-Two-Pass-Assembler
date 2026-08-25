@@ -256,6 +256,55 @@ int is_empty_or_comment(char *line){
 }
 
 /**
+ * @brief Extracts the next token from the source string.
+ *
+ * Skips leading whitespaces, copies characters up to the next whitespace,
+ * comma, or null terminator into the destination buffer, and ensures null-termination.
+ *
+ */
+char *extract_token(char *src, char *dest, int max_len){
+    int i = 0;
+    src = skip_spaces(src);
+    if(!src || *src == '\0'){
+        dest[0] = '\0';
+        return src;
+    }
+    while(*src && !isspace((unsigned char)*src) && *src != ','){
+        if(i < max_len - 1)
+          dest[i++] = *src;
+        src++;
+    }
+    dest[i] = '\0';
+    return src;
+}
+
+/**
+ * @brief Validates and consumes a comma separator between operands.
+ *
+ * Skips whitespaces, ensures that exactly one comma exists, and validates
+ * that no consecutive commas follow. Reports an error if syntax is invalid.
+ *
+ */
+char *match_comma(char *p, int line_number){
+    p = skip_spaces(p);
+    if(p == NULL || *p == '\0'){
+      fprintf(stderr, "Error in line %d: Missing comma between operands\n", line_number);
+      return NULL;
+    }
+    if(*p != ','){
+       fprintf(stderr, "Error in line %d: Missing comma separator\n", line_number);
+      return NULL;
+    }
+    p++; 
+    p = skip_spaces(p);
+    if(p != NULL && *p == ','){
+      fprintf(stderr, "Error in line %d: Multiple consecutive commas\n", line_number);
+      return NULL;
+    }
+    return p;
+}
+
+/**
  * @brief Validates operands and encodes an R-type machine instruction into the code image.
  *
  * @param parameters String containing the register operands (e.g. "$3, $5, $9").
@@ -265,24 +314,38 @@ int is_empty_or_comment(char *line){
  * @return 1 if valid and successfully encoded, 0 if errors were found.
  */
 int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct, int line_number){
-  char *reg = NULL;
-  char copy[MAX_LINE_LENGTH];
+  char reg[MAX_LINE_LENGTH];
+  char *p = NULL;
   int reg_num = 0;
   unsigned int encoded = 0;
   int count = 0;
+  int expected_count = 0;
+  
+  expected_count = (opcode == OPCODE_R_MATH) ? R_ARITHMETIC_REG_COUNT : R_COPY_REG_COUNT;
   
   /* Encode fixed opcode and funct fields */
   encoded = encoded | (opcode & OPCODE_MASK) << OPCODE_SHIFT;
   encoded = encoded | (funct & FUNCT_MASK) << FUNCT_SHIFT;
   
-  strcpy(copy, parameters);
-  reg = strtok(copy, ", \t\n");
+  p = skip_spaces(parameters);
   
+  /*Check for an unnecessary comma at the beginning*/
+  if(*p == ','){
+      fprintf(stderr, "Error in line %d: Extraneous comma at beginning of parameters\n", line_number);
+      return 0;
+  }
   /* Parse each register operand */
-  while(reg != NULL){
+  while(count < expected_count){
+      p = extract_token(p, reg, sizeof(reg));
+      if(reg[0] == '\0'){
+          fprintf(stderr, "Error in line %d: Missing register operand\n", line_number);
+          return 0;
+      }
+      
       reg_num = check_register(reg, line_number) ;
       if(reg_num == -1)
           return 0;
+          
       if(opcode == OPCODE_R_MATH){
       /* Arithmetic/logical operations: 3 registers (rs, rt, rd) */
       switch(count){
@@ -309,14 +372,21 @@ int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct
       }
     }   
     count++;
-    reg = strtok(NULL, ", \t\n");
+    if(count < expected_count){
+         if((p = match_comma(p, line_number)) == NULL)
+             return 0;
+    }
+    }
+    p = skip_spaces(p);
+    /*Check  comma*/
+    if(*p != '\0'){
+        if(*p == ','){
+            fprintf(stderr, "Error in line %d: Extraneous trailing comma\n", line_number);
+        }
+        else
+            fprintf(stderr, "Error in line %d: Extraneous text after instruction: '%s'\n", line_number, p);
+        return 0;
   }
-  /* Validate total number of register operands */
-  if((opcode == OPCODE_R_MATH && count != R_ARITHMETIC_REG_COUNT) || (opcode == OPCODE_R_COPY && count != R_COPY_REG_COUNT)){
-      fprintf(stderr, "Error in line %d: Invalid number of registers\n", line_number);
-      return 0;
-  }
-  /* Write encoded instruction to memory */
   insert_to_code_image(encoded);
   
   return 1;
@@ -333,9 +403,9 @@ int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct
  * @return 1 if valid and successfully processed, 0 on syntax/operand error.
  */
 int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_number){
-  char *token = NULL;
+  char token[MAX_LINE_LENGTH];
   char *endptr = NULL;
-  char copy[MAX_LINE_LENGTH];
+  char *p = NULL;
   long immed = 0;
   int reg_num = 0;
   unsigned int encoded = 0;
@@ -343,38 +413,54 @@ int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_
   /* Encode fixed opcode field */
   encoded = encoded | (opcode & OPCODE_MASK) << OPCODE_SHIFT;
   
-  strcpy(copy, parameters);
+  p = skip_spaces(parameters);
   
+  /* Checks for unnecessary commas */
+  if(*p == ','){
+      fprintf(stderr, "Error in line %d: Extraneous comma at beginning of parameters\n", line_number);
+      return 0;
+  }
   /* 1. Parse first operand: source register (rs) */
-  token = strtok(copy, ", \t\n");
-  if(token == NULL){
+  p = extract_token(p, token, sizeof(token));
+  if(token[0] == '\0'){
       fprintf(stderr, "Error in line %d: Missing first register operand\n", line_number);
       return 0;
   }
+  
   reg_num = check_register(token, line_number);
   if(reg_num == -1)
       return 0;
   encoded  = encoded | (reg_num & REG_MASK) << RS_SHIFT;
+  
+  /* Comma after rs */
+  if((p = match_comma(p, line_number)) == NULL) 
+      return 0;
+  
   if((opcode >= MIN_I_MATH_OPCODE && opcode <= MAX_I_MATH_OPCODE) || (opcode >= MIN_I_LOAD_STORE_OPCODE && opcode <= MAX_I_LOAD_STORE_OPCODE)){
       /* 2. Parse second operand: 16-bit immediate value */
-      token = strtok(NULL, ", \t\n");
-      if(token == NULL){
+      p = extract_token(p, token, sizeof(token));
+      if(token[0] == '\0'){
           fprintf(stderr, "Error in line %d: Missing immediate numeric value\n", line_number);
           return 0;
       }
+      
       immed = strtol(token, &endptr, 10);
       if(*endptr != '\0' || endptr == token){
           fprintf(stderr, "Error in line %d: Invalid immediate\n", line_number);
           return 0;
       }
       if(immed > MAX_IMMED_VAL || immed < MIN_IMMED_VAL){
-          fprintf(stderr, "Error in line %d: Invalid immed\n", line_number);
+          fprintf(stderr, "Error in line %d: IValue exceeds 16-bit immediate range\n", line_number);
           return 0;
       }
-    
+      
+      /* Comma after immed */
+      if((p = match_comma(p, line_number)) == NULL) 
+          return 0;
+      
       /* 3. Parse third operand: target register (rt) */
-      token = strtok(NULL, ", \t\n");
-      if(token == NULL){
+      p = extract_token(p, token, sizeof(token));
+      if(token[0] == '\0'){
           fprintf(stderr, "Error in line %d: Missing target register operand\n", line_number);
           return 0;
       }
@@ -390,27 +476,41 @@ int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_
         /* Branch instructions (beq, bne, blt, bgt): format is (rs, rt, label) */
 
         /* 2. Parse second operand: second register (rt) */
-        token = strtok(NULL, ", \t\n");
-        if(token == NULL){
-           fprintf(stderr, "Error in line %d: Missing second register operand for branch\n", line_number);
-           return 0;
+        p = extract_token(p, token, sizeof(token));
+        if(token[0] == '\0'){
+            fprintf(stderr, "Error in line %d: Missing second register operand for branch\n", line_number);
+            return 0;
         }
         reg_num = check_register(token, line_number);
         if(reg_num == -1) 
             return 0;
         encoded = encoded | (reg_num & REG_MASK) << RT_SHIFT;
-        /* Parse third operand: label name (verified now, address resolved in second pass) */
-        token = strtok(NULL, ", \t\n");
-        if(token == NULL || !is_valid_label(token, line_number))
+        
+        /* Comma after rt */
+        if((p = match_comma(p, line_number)) == NULL) 
+           return 0;
+           
+        /* Parse third operand: label name (verified now, address resolved in second pass) */  
+        p = extract_token(p, token, sizeof(token));
+        if(token[0] == '\0'){
+            fprintf(stderr, "Error in line %d: Missing target label for branch\n", line_number);
+            return 0;
+        }
+        if(!is_valid_label(token, line_number))
             return 0;
         /* Branch label address offset will be calculated and encoded in second pass */
+        }
       }
-  }
       /* 4. Check for extraneous parameters */
-      token = strtok(NULL, ", \t\n");
-      if(token != NULL){
-          fprintf(stderr, "Error in line %d: Extraneous text after instruction operands\n", line_number);
-          return 0;
+      p = skip_spaces(p);
+      if(*p != '\0'){
+        if(*p == ','){
+            fprintf(stderr, "Error in line %d: Extraneous trailing comma\n", line_number);
+        } 
+        else{
+            fprintf(stderr, "Error in line %d: Extraneous text after instruction operands: '%s'\n", line_number, p);
+        }
+        return 0;
       }
       /* Store encoded instruction word in code image */
       insert_to_code_image(encoded);
@@ -440,10 +540,13 @@ int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_
   strcpy(copy, parameters);
   token = strtok(copy, ", \t\n");
   /* 1. Handle 'hlt' instruction (expects no parameters) */
-  if(opcode != OPCODE_HLT){
-      if(has_parameters(parameters) == 0){
+  if(opcode == OPCODE_HLT){
+      if(has_parameters(parameters) == 1){
           fprintf(stderr, "Error in line %d: Superfluous parameters\n", line_number);
           return 0;
+      }
+    insert_to_code_image(encoded);
+    return 1;
   }
   if(token == NULL){
       fprintf(stderr, "Error in line %d: Missing parameter for J instruction\n", line_number);
@@ -477,7 +580,7 @@ int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_
       fprintf(stderr, "Error in line %d: Extraneous text after instruction parameter\n", line_number);
       return 0;
   }
- } 
+ 
   /* Store encoded instruction word into code image */
   insert_to_code_image(encoded);
   
@@ -494,7 +597,7 @@ int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_
 int check_register(char *reg, int line_number){
   char *end = NULL;
   long num = 0;
-  if(reg == NULL || reg[0] != REGISTER_PREFIX){
+  if(reg == NULL || strlen(reg) == 0 || reg[0] != REGISTER_PREFIX){
       fprintf(stderr, "Error in line %d: Invalid Register name\n", line_number);
       return INVALID_REGISTER;
   }
@@ -592,20 +695,20 @@ int check_directive_parameter(char *line, DirectiveType type, int line_number){
   int expecting_number = 1;
 
   if(line == NULL){
-     fprintf(stderr, "Error in line %d: Null pointer provided.\n", line_number);
+     fprintf(stderr, "Error in line %d: No parameters\n", line_number);
       return 0;
   }
   ptr = skip_spaces(line);
   
   /* Check for empty argument list */
   if(*ptr == '\0'){
-      fprintf(stderr, "Error in line %d: Missing arguments for data directive.\n", line_number);
+      fprintf(stderr, "Error in line %d: No parameters\n", line_number);
       return 0;
   }
   
   /* Check for illegal leading comma */
   if(*ptr == ','){
-      fprintf(stderr, "Error in line %d: Illegal leading comma before the first number.\n", line_number);
+      fprintf(stderr, "Error in line %d: Illegal comma before the first number\n", line_number);
       return 0;
   }
   while(*ptr != '\0'){
@@ -615,26 +718,26 @@ int check_directive_parameter(char *line, DirectiveType type, int line_number){
           
           /* Check if no digits could be parsed */
           if(ptr == endptr){
-              fprintf(stderr, "Error in line %d: Expected an integer but found '%c'.\n", line_number, *ptr);
+              fprintf(stderr, "Error in line %d: Expected an integer but found '%c'\n", line_number, *ptr);
               return 0;
           }
           
           /* Validate numeric boundaries based on directive bit-width */
           if(type == DIRECTIVE_DB){
               if(value < MIN_DB || value > MAX_DB){
-                  fprintf(stderr, "Error in line %d: Value %ld exceeds 8-bit range [%d, %d] for .db.\n", line_number, value, MIN_DB, MAX_DB);
+                  fprintf(stderr, "Error in line %d: Value %ld exceeds 8-bit range\n", line_number, value);
                   return 0;
               }
           } 
           else if(type == DIRECTIVE_DH){
                   if(value < MIN_DH || value > MAX_DH){
-                     fprintf(stderr, "Error in line %d: Value %ld exceeds 16-bit range [%d, %d] for .dh.\n", line_number, value, MIN_DH, MAX_DH);
+                     fprintf(stderr, "Error in line %d: Value %ld exceeds 16-bit range\n", line_number, value);
                     return 0;
                   }
           } 
           else if(type == DIRECTIVE_DW){
                  if(value < MIN_DW || value > MAX_DW || errno == ERANGE){
-                     fprintf(stderr, "Error in line %d: Value %ld exceeds 32-bit range for .dw.\n", line_number, value);
+                     fprintf(stderr, "Error in line %d: Value %ld exceeds 32-bit range\n", line_number, value);
                      return 0;
                  }
           }
@@ -647,17 +750,17 @@ int check_directive_parameter(char *line, DirectiveType type, int line_number){
               ptr++;
               ptr = skip_spaces(ptr);
               if(*ptr == ','){
-                 fprintf(stderr, "Error in line %d: Multiple consecutive commas.\n", line_number);
+                 fprintf(stderr, "Error in line %d: Multiple consecutive commas\n", line_number);
                   return 0;
               }
               if (*ptr == '\0') {
-                  fprintf(stderr, "Error in line %d: Illegal trailing comma at end of line.\n", line_number);
+                  fprintf(stderr, "Error in line %d: Illegal comma at end of line\n", line_number);
                   return 0;
               }
               expecting_number = 1;
             } 
             else{
-              fprintf(stderr, "Error in line %d: Missing comma between numbers or invalid character '%c'.\n", line_number, *ptr);
+              fprintf(stderr, "Error in line %d: Missing comma between numbers or invalid character '%c'\n", line_number, *ptr);
               return 0;
             }
         }

@@ -269,8 +269,11 @@ int process_macros(FILE *input_file, FILE *output_file, Macro **macro_head)
     int line_counter=0;
     int error_flag=0; /* Global error flag for the current file */
 
-    while(fgets(line, MAX_LINE_LENGTH, input_file)!= NULL) 
+    while(fgets(line, MAX_LINE_LENGTH, input_file)!= NULL)
     {
+        if(strlen(line) > MAX_LINE_LENGTH){
+          fprintf(stderr, "Line Is too long %d\n", line_counter); 
+        }
         line_counter++;
         
         /* Reset strings before each read */
@@ -302,7 +305,7 @@ int process_macros(FILE *input_file, FILE *output_file, Macro **macro_head)
             {
                 if(words_read>1) 
                 {
-                    printf("Error: Extraneous text after 'mcroend' at line %d\n", line_counter);
+                    fprintf(stderr, "Error: Extraneous text after 'mcroend' at line %d\n", line_counter);
                     error_flag = 1;
                 }
                 in_macro = 0;
@@ -313,7 +316,7 @@ int process_macros(FILE *input_file, FILE *output_file, Macro **macro_head)
                 /* A content line of the macro */
                 if(!append_macro_line(current_macro, line)) 
                 {
-                    printf("Error: Memory allocation failed at line %d\n", line_counter);
+                    fprintf(stderr, "Error: Memory allocation failed at line %d\n", line_counter);
                     return FAILURE;
                 }
             }
@@ -325,17 +328,17 @@ int process_macros(FILE *input_file, FILE *output_file, Macro **macro_head)
             {
                 if(words_read < 2) 
                 {
-                    printf("Error: Missing macro name at line %d\n", line_counter);
+                    fprintf(stderr, "Error: Missing macro name at line %d\n", line_counter);
                     error_flag = 1;
                 }
                 else if(words_read > 2) 
                 {
-                    printf("Error: Extraneous text after macro name at line %d\n", line_counter);
+                    fprintf(stderr,"Error: Extraneous text after macro name at line %d\n", line_counter);
                     error_flag = 1;
                 }
                 else if(!is_valid_macro_name(second_word)) 
                 {
-                    printf("Error: Invalid macro name '%s' at line %d\n", second_word, line_counter);
+                    fprintf(stderr, "Error: Invalid macro name '%s' at line %d\n", second_word, line_counter);
                     error_flag=1;
                 } 
                 else 

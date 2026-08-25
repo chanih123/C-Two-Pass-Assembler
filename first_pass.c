@@ -154,6 +154,11 @@ int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf){
         /* 3. Handle external symbol directives */
         if((strcmp(command_name, ".extern") == 0)){
             if(parameters != NULL && sscanf(parameters, "%s", ext_label) == 1){
+                  /* Validate label naming conventions */
+                  if(!is_valid_label(ext_label, line_number)){
+                      error_found++;
+                      continue;
+                  }
                  /* Add external symbols to the table with address 0 */
                  if(!add_symbol(ext_label, 0, external, line_number))
                     error_found++;
@@ -194,7 +199,8 @@ int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf){
   
   /* Stop processing if errors were encountered during the first pass */
   if(error_found > 0){
-      fprintf(stderr, "%d errors found during first pass in file %s. Skipping second pass.\n", error_found, filename);
+      filename[strlen(filename) - 3] = '\0';
+      fprintf(stderr, "%d errors found during first pass in file %s Skipping second pass\n", error_found, filename);
       return 0;
   } 
   

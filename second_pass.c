@@ -36,6 +36,7 @@ int run_second_pass(char *am_filename, char *ob_filename, char *ext_filename, ch
     int bytes_read;
     int error_found;
     size_t word_len;
+    int offset = 0;
     
     char line[MAX_LINE_LENGTH];
     char word[MAX_LINE_LENGTH];
@@ -43,6 +44,7 @@ int run_second_pass(char *am_filename, char *ob_filename, char *ext_filename, ch
     char entry_label[MAX_LABEL_LENGTH];
     char *parameters;
     char *next_part;
+    char *rest;
     
     FILE *fp;
 
@@ -96,10 +98,15 @@ int run_second_pass(char *am_filename, char *ob_filename, char *ext_filename, ch
 
             /* Step 5: Process .entry directives */
             if(strcmp(command_name, ".entry") == 0) {
-                if(sscanf(parameters, "%s", entry_label) == 1) {
+                if(sscanf(parameters, "%s%n", entry_label, &offset) == 1) {
                     /* Step 6: Mark symbol as entry in the symbol table */
                     if (update_symbol_as_entry(entry_label) == 0) {
-                        fprintf(stderr, "Error in line %d: Symbol '%s' for .entry not found in symbol table.\n", line_number, entry_label);
+                        fprintf(stderr, "Error in line %d: Symbol '%s' for .entry not found in symbol table or or is defined as an external symbol\n", line_number, entry_label);
+                        error_found++;
+                    }
+                    rest = skip_spaces(parameters + offset);
+                    if (*rest != '\0') {
+                        fprintf(stderr, "Error in line %d: Extraneous text '%s'\n", line_number, rest);
                         error_found++;
                     }
                 }

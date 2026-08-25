@@ -15,7 +15,7 @@
 /* Constants and Buffer Sizes */
 
 /** @brief Maximum allowed length for a single line of assembly code. */
-#define MAX_LINE_LENGTH 1024
+#define MAX_LINE_LENGTH 81
 
 /** @brief Maximum allowed length for a label name (including null terminator). */
 #define MAX_LABEL_LENGTH 32

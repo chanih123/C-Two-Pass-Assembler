@@ -1,0 +1,16 @@
+; Name-validation edge cases.
+; Intended checks:
+; 1) illegal label names
+; 2) illegal macro names
+; 3) identical macro and label names
+; 4) opcode/directive/register-like names reused as symbols
+
+1BAD: add $1,$2,$3
+add:  hlt
+.entry add
+
+
+
+SAME: ori $1,-1,$2
+
+$7: hlt

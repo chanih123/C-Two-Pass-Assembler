@@ -122,6 +122,8 @@ int find_symbol_index(char *name){
 int update_symbol_as_entry(char *name) {
     int index = find_symbol_index(name);
     if(index != -1) {
+        if(symbol_table[index].type == external)
+            return 0;
         symbol_table[index].is_entry = 1;
         return 1;
     }

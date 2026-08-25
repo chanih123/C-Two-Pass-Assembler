@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
     /* Check that command line arguments were passed (file names without extensions) */
     if(argc < 2) 
     {
-        printf("Error: File names were not transferred.\n");
+        printf("File names were not transferred.\n");
         return 0;
     }
 
@@ -128,7 +128,6 @@ int main(int argc, char *argv[])
         
         /* Execute the second pass */
         if(run_second_pass(am_filename, ob_filename, ext_filename, ent_filename, &ICF, &DCF) == 0){
-            printf("\n>>> Second Pass Failed due to errors in file '%s'.\n", base_name);
             free_symbol_table();
             free(code_image);
             free(data_image);
