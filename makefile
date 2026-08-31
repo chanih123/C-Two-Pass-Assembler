@@ -22,3 +22,5 @@ global.o: global.c global.h
 utils.o: utils.c utils.h global.h
 	gcc -c -Wall -ansi -pedantic utils.c -o utils.o
 
+clean:
+	rm -f *.o assembler *.am *.ob *.ent *.ext
