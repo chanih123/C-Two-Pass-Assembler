@@ -1,0 +1,8 @@
+*.o
+assembler
+*.am
+*.ob
+*.ent
+*.ext
+.vscode/
+.idea/
