@@ -51,38 +51,33 @@ The project follows a clean, modular architecture separating compilation phases,
 
 ### Compilation
 To compile the project with standard strict flags (`-Wall -ansi -pedantic`), run:
+`make`
 
-```bash
-make
-To clean build artifacts (.o files and executables):
+To clean build artifacts (`.o` files and executables):
+`make clean`
 
-Bash
-make clean
-💻 Usage
-Run the compiled assembler executable followed by one or more input file names (including the .as extension):
+---
 
-Bash
-./assembler file1.as file2.as file3.as
-Example
-Given an input file named input1.as:
+## 💻 Usage
 
-Bash
-./assembler input1.as
+Run the compiled `assembler` executable followed by one or more input file names (including the `.as` extension):
+`./assembler file1.as file2.as file3.as`
+
+### Example
+Given an input file named `input1.as`:
+`./assembler input1.as`
+
 If successful, the following files will be created:
+* `input1.am`
+* `input1.ob`
+* `input1.ent` (if entry labels exist)
+* `input1.ext` (if extern labels exist)
 
-input1.am
+---
 
-input1.ob
+## 🛠 Key Features & Implementation Details
 
-input1.ent (if entry labels exist)
-
-input1.ext (if extern labels exist)
-
-🛠 Key Features & Implementation Details
-Dynamic Data Structures: Dynamic memory allocation for symbol tables and macro registries to handle variable-sized inputs without fixed buffers.
-
-Robust Error Handling: Validates syntax, operand counts, and invalid addressing modes per line with descriptive error messages.
-
-Strict Memory Management: All dynamically allocated memory is cleanly freed upon completion or error recovery.
-
-Modular Codebase: High cohesion and loose coupling between compiler passes.
+* **Dynamic Data Structures:** Dynamic memory allocation for symbol tables and macro registries to handle variable-sized inputs without fixed buffers.
+* **Robust Error Handling:** Validates syntax, operand counts, and invalid addressing modes per line with descriptive error messages.
+* **Strict Memory Management:** All dynamically allocated memory is cleanly freed upon completion or error recovery.
+* **Modular Codebase:** High cohesion and loose coupling between compiler passes.
