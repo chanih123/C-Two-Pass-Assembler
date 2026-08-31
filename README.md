@@ -32,36 +32,50 @@ If the assembly process finishes without errors, the assembler generates up to f
 
 The project follows a clean, modular architecture separating compilation phases, data structures, and utilities:
 
-├── main.c  # Program entry point and file processing pipeline
-├── preprocessor.c / .h   # Macro definition, parsing, and expansion (.as -> .am)
-├── first_pass.c / .h     # First pass logic, parsing, and instruction encoding
-├── second_pass.c / .h    # Second pass logic, address resolution, and file generation
-├── symbol_table.c / .h   # Dynamic symbol table ADT and lookup operations
-├── utils.c / .h          # Helper functions (string manipulation, memory handling, error reporting)
-├── global.c / .h        # Global constants, type definitions, and initialization structures
-└── Makefile              # Build automation script
+* `main.c` – Program entry point and file processing pipeline.
+* `preprocessor.c` / `preprocessor.h` – Macro definition, parsing, and expansion (`.as` -> `.am`).
+* `first_pass.c` / `first_pass.h` – First pass logic, parsing, and instruction encoding.
+* `second_pass.c` / `second_pass.h` – Second pass logic, address resolution, and file generation.
+* `symbol_table.c` / `symbol_table.h` – Dynamic symbol table ADT and lookup operations.
+* `utils.c` / `utils.h` – Helper functions (string manipulation, memory handling, error reporting).
+* `global.c` / `global.h` – Global constants, type definitions, and initialization structures.
+* `Makefile` – Build automation script.
 
-🚀 Getting Started
-Prerequisites
-A C compiler (e.g., gcc with ANSI C support)
+---
 
-make utility
+## 🚀 Getting Started
 
-Compilation
-To compile the project with standard strict flags (-Wall -ansi -pedantic), run: make
+### Prerequisites
+* A C compiler (e.g., `gcc` with ANSI C support)
+* `make` utility
 
-To clean build artifacts (.o files and executables): make clean
+### Compilation
+To compile the project with standard strict flags (`-Wall -ansi -pedantic`), run:
 
+```bash
+make
+To clean build artifacts (.o files and executables):
+
+Bash
+make clean
 💻 Usage
 Run the compiled assembler executable followed by one or more input file names (including the .as extension):
-./assembler file1.as file2.as file3.as
 
+Bash
+./assembler file1.as file2.as file3.as
 Example
-Given an input file named input1.as: ./assembler input1.as
+Given an input file named input1.as:
+
+Bash
+./assembler input1.as
 If successful, the following files will be created:
+
 input1.am
+
 input1.ob
+
 input1.ent (if entry labels exist)
+
 input1.ext (if extern labels exist)
 
 🛠 Key Features & Implementation Details
