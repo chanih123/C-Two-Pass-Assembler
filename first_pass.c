@@ -29,7 +29,7 @@
  * @param dcf Pointer to store the final Data Counter (DCF) value.
  * @return 1 if the first pass completed successfully without errors, 0 otherwise.
  */
-int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf){
+int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf, Macro *macro_head){
 
   int opcode = 0;
   int funct = 0;
@@ -80,7 +80,7 @@ int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf){
             word[strlen(word) -1] = '\0'; /* Strip the colon from the label name */
             
             /* Validate label naming conventions */
-            if(!is_valid_label(word, line_number)){
+            if(!is_valid_label(word, macro_head, line_number)){
                 error_found++;
                 continue;
             }
@@ -155,7 +155,7 @@ int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf){
         if((strcmp(command_name, ".extern") == 0)){
             if(parameters != NULL && sscanf(parameters, "%s", ext_label) == 1){
                   /* Validate label naming conventions */
-                  if(!is_valid_label(ext_label, line_number)){
+                  if(!is_valid_label(ext_label, macro_head, line_number)){
                       error_found++;
                       continue;
                   }
@@ -187,20 +187,26 @@ int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf){
                      error_found++;
              }
              else if(opcode >= MIN_I_OPCODE && opcode <= MAX_I_OPCODE){
-                      if(!check_and_enter_I_function_parameter(parameters, opcode, line_number))
+                      if(!check_and_enter_I_function_parameter(parameters, opcode, macro_head, line_number))
                           error_found++;
              }
-             else if(check_end_enter_J_function_parameter(parameters, opcode, line_number) == 0)
+             else if(check_end_enter_J_function_parameter(parameters, opcode, macro_head, line_number) == 0)
                        error_found++;
           }
       }
+      /* Check memory image limit (IC + DC) */
+      if((IC + DC) > MAX_MEMORY_SIZE){ 
+          fprintf(stderr, "Fatal Error: Memory image exceeds maximum allowed size in file %s.\n", filename);
+          error_found++;
+      }
+
   
   fclose(fp);
   
   /* Stop processing if errors were encountered during the first pass */
   if(error_found > 0){
       filename[strlen(filename) - 3] = '\0';
-      fprintf(stderr, "%d errors found during first pass in file %s Skipping second pass\n", error_found, filename);
+      fprintf(stderr, "%d errors found during first pass in file %s. Moves to the next file\n", error_found, filename);
       return 0;
   } 
   

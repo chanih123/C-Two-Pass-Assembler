@@ -1,6 +1,0 @@
-typedef struct Macro 
-{
-    char name[MAX_LABEL];
-    char *content;
-    struct Macro *next;
-} Macro;

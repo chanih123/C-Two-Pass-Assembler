@@ -107,11 +107,11 @@ int main(int argc, char *argv[])
            free(data_image);
            continue;
         }
+        printf("Pre-assembler completed successfully in file '%s'\n", base_name);
         
         /* Close the files after pre-assembler processing is complete */
         fclose(input_file);
         fclose(file_am);
-        free_macros(macro_head);
 
         /* Prepare output filenames for the second pass */
         sprintf(ob_filename, "%s.ob", base_name);
@@ -119,27 +119,31 @@ int main(int argc, char *argv[])
         sprintf(ent_filename, "%s.ent", base_name);
 
         /* Execute the first pass on the generated .am file */
-        if(run_first_pass(am_filename, NULL, &ICF, &DCF) == 0){
+        if(run_first_pass(am_filename, NULL, &ICF, &DCF, macro_head) == 0){
             free_symbol_table();
             free(code_image);
             free(data_image);
+            free_macros(macro_head);
             continue;
         }
+        printf("First pass completed successfully in file '%s'\n", base_name);
         
         /* Execute the second pass */
         if(run_second_pass(am_filename, ob_filename, ext_filename, ent_filename, &ICF, &DCF) == 0){
             free_symbol_table();
             free(code_image);
             free(data_image);
+            free_macros(macro_head);
             continue;
         }
-        
+        printf("Second pass completed successfully in file '%s'\n", base_name);
         printf("\n");
         
         /* Free allocated memory and clear resources for the current iteration */
         free_symbol_table();
         free(code_image);
         free(data_image);
+        free_macros(macro_head);
     }
     return 1;
 }

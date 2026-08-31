@@ -1,11 +1,8 @@
-assembler: main.o assembler.o preprocessor.o first_pass.o second_pass.o symbol_table.o global.o utils.o
-	gcc -g -Wall -ansi -pedantic main.o assembler.o preprocessor.o first_pass.o second_pass.o symbol_table.o global.o utils.o -o assembler
+assembler: main.o preprocessor.o first_pass.o second_pass.o symbol_table.o global.o utils.o
+	gcc -g -Wall -ansi -pedantic main.o preprocessor.o first_pass.o second_pass.o symbol_table.o global.o utils.o -o assembler
 
-main.o: main.c assembler.h global.h preprocessor.h first_pass.h second_pass.h
+main.o: main.c global.h preprocessor.h first_pass.h second_pass.h
 	gcc -c -Wall -ansi -pedantic main.c -o main.o
-
-assembler.o: assembler.c assembler.h global.h
-	gcc -c -Wall -ansi -pedantic assembler.c -o assembler.o
 
 preprocessor.o: preprocessor.c preprocessor.h global.h utils.h
 	gcc -c -Wall -ansi -pedantic preprocessor.c -o preprocessor.o

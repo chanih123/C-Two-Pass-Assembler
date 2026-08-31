@@ -50,15 +50,19 @@ void init_symbol_table(void){
  */
 int add_symbol(char *name, int value, SymbolType type, int line_number){
     Symbol *temp = NULL;
+    int index;
 
     if(name == NULL)
         return 0;
     
     /* Check if symbol already exists in table */
-    if(find_symbol_index(name) != -1){
+    index = find_symbol_index(name);
+    if(index != -1 && symbol_table[index].type != external){
       fprintf(stderr, "Error in line %d: Symbol '%s' is already defined\n", line_number, name);
       return 0;
     }
+    if(symbol_table[index].type == external)
+        return 1;
     
     /* Expand array capacity dynamically if full */
     if(symbol_table == NULL || symbol_count >= symbol_capacity){

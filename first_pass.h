@@ -12,6 +12,9 @@
 #include "symbol_table.h"
 #include "utils.h"
 #include "global.h"
+#include "preprocessor.h"
+
+#define MAX_MEMORY_SIZE 33554431 /*Maximum memory size*/
 
 /* Data sizes in bytes */
 /** @brief Size of a byte data directive (.db) in bytes. */
@@ -42,7 +45,7 @@
  * @param dcf Pointer to store the final Data Counter (DC) value.
  * @return 1 on success, 0 if errors were encountered.
  */
-int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf);
+int run_first_pass(char *filename, Symbol **symbol_table, int *icf, int *dcf, Macro *macro_head);
 
 #endif /* FIRST_PASS_H */
 

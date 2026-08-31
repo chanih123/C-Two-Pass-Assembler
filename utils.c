@@ -155,7 +155,7 @@ int has_parameters(char *str){
  * @param line_number Current line number for error reporting.
  * @return 1 if valid, 0 otherwise.
  */
-int is_valid_label(char *name, int line_number){
+int is_valid_label(char *name, Macro *macro_head, int line_number){
 
     int length = strlen(name);
     int i;
@@ -164,6 +164,11 @@ int is_valid_label(char *name, int line_number){
         fprintf(stderr, "Error in line %d: Label name cannot be empty.\n", line_number);
         return 0;
     }
+    if(find_macro(macro_head, name) != NULL){
+      fprintf(stderr, "Error in line %d: The label name macro name\n", line_number);
+        return 0;
+    }
+      
     if(length > MAX_LABEL_LENGTH){
         fprintf(stderr, "Error in line %d: The label name is too long.\n", line_number);
         return 0;
@@ -402,7 +407,7 @@ int check_and_enter_R_function_parameter(char *parameters, int opcode, int funct
  * @param line_number Current line number in source file for error reporting.
  * @return 1 if valid and successfully processed, 0 on syntax/operand error.
  */
-int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_number){
+int check_and_enter_I_function_parameter(char *parameters, int opcode, Macro *macro_head, int line_number){
   char token[MAX_LINE_LENGTH];
   char *endptr = NULL;
   char *p = NULL;
@@ -496,7 +501,7 @@ int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_
             fprintf(stderr, "Error in line %d: Missing target label for branch\n", line_number);
             return 0;
         }
-        if(!is_valid_label(token, line_number))
+        if(!is_valid_label(token, macro_head, line_number))
             return 0;
         /* Branch label address offset will be calculated and encoded in second pass */
         }
@@ -528,7 +533,7 @@ int check_and_enter_I_function_parameter(char *parameters, int opcode, int line_
  * @param line_number Current line number in source file for error reporting.
  * @return 1 if valid and successfully processed, 0 on operand/syntax error.
  */
-int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_number){
+int check_end_enter_J_function_parameter(char *parameters, int opcode, Macro *macro_head, int line_number){
   char *token = NULL;
   char copy[MAX_LINE_LENGTH];
   int reg_num;
@@ -554,7 +559,7 @@ int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_
   }  
   /* 3. Validate 'la' and 'call' (only accept a label target) */
   if(opcode == OPCODE_LA || opcode == OPCODE_CALL){
-      if(is_valid_label(token, line_number) == 0)
+      if(is_valid_label(token, macro_head, line_number) == 0)
           return 0;
       /* Target label address will be resolved and filled during second pass */
   }
@@ -569,7 +574,7 @@ int check_end_enter_J_function_parameter(char *parameters, int opcode, int line_
         encoded  = encoded | (reg_num & J_ADDRESS_MASK);
     }
     else{
-        if(is_valid_label(token, line_number) == 0)
+        if(is_valid_label(token, macro_head, line_number) == 0)
             return 0;
         /*Target label address will be resolved during second pass (bit 25 remains 0)*/
     }
